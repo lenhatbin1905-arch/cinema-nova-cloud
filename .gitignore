@@ -1,0 +1,18 @@
+# Local state, credentials, generated media and user data
+.env
+.env.*
+!.env.example
+*.token
+*.cookie
+*.cookies
+data/
+output/
+media/
+*.mp4
+*.mov
+*.webm
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/

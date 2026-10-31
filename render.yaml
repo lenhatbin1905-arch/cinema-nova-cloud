@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: cinema-nova-cloud
+    runtime: static
+    buildCommand: mkdir -p public && cp index.html cloud-connector.js public/
+    staticPublishPath: ./public
