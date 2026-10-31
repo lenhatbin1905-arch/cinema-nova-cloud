@@ -14,25 +14,26 @@ label{display:block;font-size:12px;color:#cad4ec;margin:14px 0 6px;font-weight:6
 @media(max-width:1100px){.layout{grid-template-columns:1fr}.sidebar{position:static;display:flex;flex-wrap:wrap;align-items:center;gap:7px}.aside-title,.side-note{display:none}.nav{margin:0}.cols{grid-template-columns:1fr}}@media(max-width:600px){.layout{padding:22px 13px}.panel{padding:17px}.twocol{grid-template-columns:1fr}header .inside{padding:13px}.online{font-size:10px}h1{font-size:27px}}
 </style></head>
 <body>
-<header><div class="inside"><div class="brand">◈ CINEMA <em>NOVA</em><small>STUDIO EDITION</small></div><span class="online">● CLOUD PREVIEW</span></div></header>
+<header><div class="inside"><div class="brand">◈ CINEMA <em>NOVA</em><small>STUDIO EDITION</small></div><span class="online">● SCRIPT STUDIO PREVIEW</span></div></header>
 <div class="layout">
-<aside class="sidebar"><div class="aside-title">Không gian sáng tạo</div><a class="nav active" href="#project">✦ Tạo dự án</a><a class="nav" href="#script">▤ Biên tập kịch bản</a><a class="nav" href="#characters">♙ Nhân vật</a><a class="nav" href="#production">▣ FlowKit Production</a><div class="side-note"><b>Phiên bản đám mây</b><br/>Lưu bản nháp trong trình duyệt. Để tạo phim thật, hãy bật CINEMA NOVA Cloud Connector trên Windows và giữ FlowKit đang chạy.</div></aside>
+<aside class="sidebar"><div class="aside-title">Không gian sáng tạo</div><a class="nav active" href="#project">✦ Tạo dự án</a><a class="nav" href="#script">▤ Biên tập kịch bản</a><a class="nav" href="#characters">♙ Nhân vật</a><a class="nav" href="#production">▣ FlowKit Production</a><div class="side-note"><b>Phiên bản đám mây</b><br/>Bản nháp được lưu trong trình duyệt. Connector cục bộ chỉ kiểm tra provider; sản xuất video chưa được bật.</div></aside>
 <main><div class="eyebrow">AI MOVIE WORKSPACE • SCRIPT FIRST</div><h1>Mỗi bộ phim bắt đầu<br/>từ một câu chuyện hay.</h1><p class="muted">Lên ý tưởng, xem trước lời thoại, sửa từng cảnh và duyệt kịch bản trước khi tạo video.</p>
 <div class="steps"><span class="step">01 Ý tưởng</span><span class="step">02 Kịch bản & lời thoại</span><span class="step">03 Duyệt</span><span class="step">04 Video</span></div>
 <div class="cols"><div>
-<section class="panel" id="project"><h2>✦ Dự án điện ảnh mới</h2><label for="title">Tên phim</label><input id="title" value="Giải cứu giữa tâm chấn" maxlength="120"/><label for="idea">Ý tưởng của bạn</label><textarea id="idea" placeholder="Ví dụ: Người cha vượt qua thảm họa để cứu con gái...">Một người cha bất chấp nguy hiểm chạy vào thành phố đổ nát để giải cứu con gái giữa trận động đất.</textarea><div class="twocol"><div><label for="genre">Thể loại</label><select id="genre"><option>Hành động</option><option selected>Thảm họa</option><option>Hài hước</option><option>Kinh dị</option><option>Tình cảm</option><option>Gia đình</option><option>Khoa học viễn tưởng</option><option>Võ thuật</option><option>Hình sự</option><option>Phiêu lưu</option><option>Cổ trang</option><option>Hoạt hình</option><option>Tài liệu</option><option>Thần thoại</option><option>Chiến tranh</option><option>Âm nhạc</option></select></div><div><label for="duration">Thời lượng</label><select id="duration"><option value="15">15 giây</option><option value="30" selected>30 giây</option><option value="60">60 giây</option></select></div></div><label for="ratio">Tỷ lệ khung hình</label><select id="ratio"><option value="9:16">9:16 — Video dọc</option><option value="16:9">16:9 — Điện ảnh ngang</option></select><div class="actions"><button id="draft" class="btn primary">✧ Phác thảo kịch bản</button><button id="aiScript" class="btn" disabled>✦ AI viết kịch bản có lời thoại</button><button id="save" class="btn outline">Lưu bản nháp</button><button id="load" class="btn outline">Mở bản đã lưu</button></div><p class="muted" style="font-size:12px">Bản phác thảo dùng mẫu có sẵn, không phải AI tạo nội dung. Sau này có thể kết nối Gemini để viết kịch bản tùy ý.</p></section>
+<section class="panel" id="project"><h2>✦ Dự án điện ảnh mới</h2><label for="title">Tên phim</label><input id="title" value="Giải cứu giữa tâm chấn" maxlength="120"/><label for="idea">Ý tưởng của bạn</label><textarea id="idea" placeholder="Ví dụ: Người cha vượt qua thảm họa để cứu con gái...">Một người cha bất chấp nguy hiểm chạy vào thành phố đổ nát để giải cứu con gái giữa trận động đất.</textarea><div class="twocol"><div><label for="genre">Thể loại</label><select id="genre"><option>Hành động</option><option selected>Thảm họa</option><option>Hài hước</option><option>Kinh dị</option><option>Tình cảm</option><option>Gia đình</option><option>Khoa học viễn tưởng</option><option>Võ thuật</option><option>Hình sự</option><option>Phiêu lưu</option><option>Cổ trang</option><option>Hoạt hình</option><option>Tài liệu</option><option>Thần thoại</option><option>Chiến tranh</option><option>Âm nhạc</option></select></div><div><label for="duration">Thời lượng</label><select id="duration"><option value="15">15 giây</option><option value="30" selected>30 giây</option><option value="60">60 giây</option></select></div></div><label for="ratio">Tỷ lệ khung hình</label><select id="ratio"><option value="9:16">9:16 — Video dọc</option><option value="16:9">16:9 — Điện ảnh ngang</option></select><div class="actions"><button id="draft" class="btn primary">✧ Phác thảo kịch bản mẫu</button><button id="aiScript" class="btn" disabled title="Chưa cấu hình mô hình ngôn ngữ">✦ AI viết kịch bản • chưa kết nối</button><button id="save" class="btn outline">Lưu bản nháp</button><button id="load" class="btn outline">Mở bản đã lưu</button></div><p class="muted" style="font-size:12px">Phác thảo theo mẫu ngoại tuyến, không phải nội dung do AI tạo. Hiện chưa kết nối mô hình ngôn ngữ.</p></section>
 <section class="panel" id="script"><h2>▤ Xem & chỉnh sửa kịch bản</h2><p class="muted" style="font-size:13px">Mỗi cảnh có hành động, lời thoại và thời lượng. Chỉnh sửa bất kỳ nội dung nào sẽ yêu cầu duyệt lại.</p><div id="scenes"></div><div class="actions"><button id="add" class="btn">+ Thêm cảnh</button><button id="approve" class="btn primary">✓ Duyệt kịch bản</button><button id="export" class="btn outline">Xuất dự án JSON</button></div><div role="status" id="status" class="status">Chưa duyệt kịch bản.</div></section>
 </div><div>
 <section class="panel" id="characters"><h2>♙ Hồ sơ nhân vật</h2><p class="muted" style="font-size:13px">Chọn ảnh tham chiếu nhân vật để xem trước trong dự án.</p><label for="character">Tên nhân vật</label><input id="character" value="Nhân vật chính"/><label for="photo">Ảnh nhân vật</label><input id="photo" type="file" accept="image/*"/><img class="preview" id="preview" alt="Ảnh tham chiếu"/><div class="notice" style="margin-top:13px">Ảnh chỉ được xem trong trình duyệt hiện tại, chưa tải lên máy chủ hoặc Google Flow.</div></section>
-<section class="panel"><h2>◈ Trạng thái kịch bản</h2><div class="statgrid"><div class="stat"><b id="sceneCount">0</b><span>Số cảnh</span></div><div class="stat"><b id="seconds">0s</b><span>Tổng thời lượng</span></div></div><span class="pill" id="approvalState">Chờ biên tập</span></section>
+<section class="panel"><h2>◈ Trạng thái kịch bản</h2><div class="statgrid"><div class="stat"><b id="sceneCount">0</b><span>Số cảnh</span></div><div class="stat"><b id="seconds">0s</b><span>Giây clip hợp lệ</span></div></div><span class="pill" id="approvalState">Chờ biên tập</span></section>
 <section class="panel" id="production">
 <h2>▣ FlowKit Production</h2>
-<p class="muted">Kết nối máy Windows đang chạy FlowKit, rồi duyệt kịch bản để gửi các cảnh đi sản xuất.</p>
+<p class="muted">Connector chạy cục bộ trên Windows. Trạng thái provider được đọc trực tiếp; phiên bản này chưa gửi job sản xuất thật.</p>
+<label for="pairingToken">Mã ghép nối (chỉ cần với website Render)</label><input id="pairingToken" type="password" autocomplete="off" placeholder="Lấy mã từ cửa sổ connector trên Windows" aria-describedby="pairingHelp"/><p id="pairingHelp" class="muted" style="font-size:11px">Giữ mã này riêng tư. Khi mở giao diện tại localhost, mã được lấy tự động.</p>
 <div class="actions"><button class="btn outline" id="checkConnection">↻ Kiểm tra kết nối máy tính</button></div>
 <p id="connectorStatus" role="status" style="font-size:12px;color:#cfc7ed;line-height:1.5">Đang kiểm tra cầu nối trên Windows...</p>
 <div class="actions"><button class="btn primary" id="prompts" disabled>↓ Xuất prompt từng cảnh</button></div>
 <div class="actions"><button class="btn primary" id="produce" disabled>TẠO VIDEO • CHƯA KẾT NỐI</button></div>
-<div class="notice">Cần chạy <b>Cloud Connector V1.6</b> trên cùng máy Windows với Chrome và FlowKit. Nếu Chrome hỏi quyền truy cập mạng nội bộ, hãy cho phép. Không cần mở cổng máy tính ra Internet.</div>
+<div class="notice">Mở <b>START_CINEMA_NOVA.bat</b> trên máy Windows. Connector chỉ lắng nghe 127.0.0.1; website Render cần mã ghép nối. Chrome có thể yêu cầu quyền truy cập mạng nội bộ.</div>
 <p id="workflowArea" role="status" style="font-size:13px;color:#82dfd2;white-space:pre-wrap">Chưa bắt đầu sản xuất.</p>
 <video id="moviePlayer" style="display:none;width:100%;border-radius:12px;margin-top:12px" controls playsinline preload="metadata"></video>
 <button id="downloadMovie" class="btn" style="display:none;margin-top:10px">↓ Tải phim MP4 về máy</button>
@@ -58,11 +59,12 @@ field('Lời thoại tiếng Việt',safe(s.dialogue),x=>s.dialogue=x,'textarea'
 field('Thời lượng (giây)',s.duration,x=>s.duration=Number(x),'input');root.append(box)});
 updateStats();}
 function updateStats(){el('sceneCount').textContent=scenes.length;el('seconds').textContent=total()+'s'}
-function draft(){const idea=safe(el('idea').value).trim();if(!idea){alert('Hãy nhập ý tưởng phim trước.');return}const n=Math.max(2,Math.ceil(Number(el('duration').value)/10));const part=Number(el('duration').value)/n;
-scenes=Array.from({length:n},(_,i)=>({duration:part,action:i===0?'Mở đầu điện ảnh. '+idea:i===n-1?'Cao trào, hành động quyết định, kết thúc cảm xúc và rõ ràng.':'Tình huống nguy hiểm tăng dần. Nhân vật phản ứng thật, chuyển động liên tục và nhất quán.',dialogue:i===0?'Nhân vật chính: “Tôi phải tìm mọi cách!”':i===n-1?'Nhân vật chính: “Cuối cùng chúng ta cũng vượt qua!”':'Nhân vật chính: “Cố lên, không được bỏ cuộc!”'}));markChanged();refresh();setState('Đã tạo bản nháp mẫu. Hãy đọc và sửa lời thoại cho phù hợp câu chuyện.');}
+function clipPlan(target){const sizes=[4,6,8,10];let best=null;for(let n=1;n<=Math.ceil(target/4)+1;n++){for(let mask=0;mask<Math.pow(sizes.length,n);mask++){let value=mask,plan=[],sum=0;for(let i=0;i<n;i++){const duration=sizes[value%sizes.length];value=Math.floor(value/sizes.length);plan.push(duration);sum+=duration}if(sum<target)continue;const score=[n,sum-target];if(!best||score[0]<best.score[0]||(score[0]===best.score[0]&&score[1]<best.score[1]))best={plan,score};}if(best)break;}return best.plan}
+function draft(){const idea=safe(el('idea').value).trim();if(!idea){alert('Hãy nhập ý tưởng phim trước.');return}const target=Number(el('duration').value),plan=clipPlan(target),n=plan.length;
+scenes=Array.from({length:n},(_,i)=>({duration:plan[i],action:i===0?'Mở đầu điện ảnh. '+idea:i===n-1?'Cao trào, hành động quyết định, kết thúc cảm xúc và rõ ràng.':'Tình huống nguy hiểm tăng dần. Nhân vật phản ứng thật, chuyển động liên tục và nhất quán.',dialogue:i===0?'Nhân vật chính: “Tôi phải tìm mọi cách!”':i===n-1?'Nhân vật chính: “Cuối cùng chúng ta cũng vượt qua!”':'Nhân vật chính: “Cố lên, không được bỏ cuộc!”'}));markChanged();refresh();setState('Đã tạo bản nháp mẫu. Thời lượng clip hợp lệ: '+total()+' giây; mục tiêu phim: '+target+' giây. Phần dư cần cắt khi dựng.');}
 function getData(){let v={scenes:scenes.map(s=>({...s}))};keys.forEach(k=>v[k]=el(k).value);return v}
 function download(name,body,mime){const u=URL.createObjectURL(new Blob([body],{type:mime}));const a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2500)}
-function approve(){if(!scenes.length||scenes.some(s=>!safe(s.action).trim()||!safe(s.dialogue).trim()||!Number.isFinite(Number(s.duration))||Number(s.duration)<=0)){alert('Hãy điền đủ hành động, lời thoại và thời lượng của tất cả cảnh.');return}if(Math.abs(total()-Number(el('duration').value))>0.01){alert('Tổng thời lượng cảnh ('+total()+' giây) chưa bằng thời lượng phim ('+el('duration').value+' giây).');return}approved=true;el('prompts').disabled=false;el('approvalState').textContent='✓ Đã duyệt';setState('✓ Kịch bản đã được duyệt. Có thể xuất prompt theo từng cảnh.');}
+function approve(){if(!scenes.length||scenes.some(s=>!safe(s.action).trim()||!safe(s.dialogue).trim()||!Number.isFinite(Number(s.duration))||Number(s.duration)<=0)){alert('Hãy điền đủ hành động, lời thoại và thời lượng của tất cả cảnh.');return}if(total()<Number(el('duration').value)){alert('Tổng thời lượng clip hợp lệ ('+total()+' giây) phải bằng hoặc dài hơn mục tiêu phim ('+el('duration').value+' giây).');return}if(scenes.some(s=>![4,6,8,10].includes(Number(s.duration)))){alert('Mỗi clip cần 4, 6, 8 hoặc 10 giây theo thời lượng Flow Agent đã xác nhận.');return}approved=true;el('prompts').disabled=false;el('approvalState').textContent='✓ Đã duyệt';setState('✓ Kịch bản đã được duyệt. Có thể xuất prompt theo từng cảnh.');}
 el('draft').onclick=draft;el('add').onclick=()=>{scenes.push({action:'',dialogue:'',duration:8});markChanged();refresh()};el('approve').onclick=approve;
 el('save').onclick=()=>{try{localStorage.setItem('cinema-nova-cloud-project',JSON.stringify(getData()));setState('Đã lưu bản nháp trên trình duyệt này.')}catch(e){setState('Không thể lưu: bộ nhớ trình duyệt không khả dụng. Hãy dùng Xuất JSON.')}};
 el('load').onclick=()=>{try{const s=localStorage.getItem('cinema-nova-cloud-project');if(!s){alert('Chưa có bản nháp đã lưu.');return}const d=JSON.parse(s);keys.forEach(k=>{if(d[k]!=null)el(k).value=d[k]});scenes=Array.isArray(d.scenes)?d.scenes:[];markChanged();refresh();setState('Đã mở bản nháp. Cần duyệt lại trước khi xuất prompt.')}catch(e){alert('Không mở được bản nháp.')}};
@@ -71,149 +73,4 @@ el('prompts').onclick=()=>{if(!approved)return;const p=scenes.map((s,i)=>'CẢNH
 keys.forEach(k=>el(k).addEventListener('input',markChanged));
 el('photo').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(previewURL)URL.revokeObjectURL(previewURL);if(f&&f.type.startsWith('image/')){previewURL=URL.createObjectURL(f);el('preview').src=previewURL;el('preview').style.display='block';markChanged()}});
 refresh();
-</script><script>
-"use strict";
-(() => {
-  const LOCAL="http://127.0.0.1:8765";
-  let connected=false, running=false, jobId=sessionStorage.getItem("cinemanova-job")||"";
-  const statusEl=document.getElementById("connectorStatus");
-  const workEl=document.getElementById("workflowArea");
-  const makeBtn=document.getElementById("produce");
-  const scriptBtn=document.getElementById("aiScript");
-  const checkBtn=document.getElementById("checkConnection");
-  const player=document.getElementById("moviePlayer");
-  const downloadBtn=document.getElementById("downloadMovie");
-  function say(text,kind="note"){statusEl.textContent=text;statusEl.style.color=kind==="ok"?"#76e3c1":kind==="error"?"#ffa5a5":"#cfc7ed";}
-  function step(text){workEl.textContent=text;}
-  function updateButton(){
-    makeBtn.disabled=!approved||!connected||running;
-    makeBtn.textContent=running?"ĐANG TẠO VIDEO...":connected?"▶ TẠO VIDEO QUA FLOWKIT":"TẠO VIDEO • CHƯA KẾT NỐI";
-    scriptBtn.disabled=!connected||running;
-  }
-  const oldMark=markChanged;
-  markChanged=function(){oldMark();updateButton();};
-  document.getElementById("approve").addEventListener("click",updateButton);
-  const oldRefresh=refresh;
-  refresh=function(){oldRefresh();updateButton();};
-  async function request(path,payload,timeout=20000){
-    const ctl=new AbortController();
-    const timeoutId=setTimeout(()=>ctl.abort(),timeout);
-    try {
-      const response=await fetch(LOCAL+path,{
-        method:payload===undefined?"GET":"POST",
-        headers:payload===undefined?{}:{"Content-Type":"application/json"},
-        body:payload===undefined?undefined:JSON.stringify(payload),
-        cache:"no-store",mode:"cors",signal:ctl.signal
-      });
-      const data=await response.json();
-      if(!response.ok||data.ok===false)throw new Error(data.error||("HTTP "+response.status));
-      return data;
-    } catch(err){
-      if(err.name==="TypeError"||err.name==="AbortError"){
-        throw new Error("Không thể truy cập cầu nối Windows tại 127.0.0.1:8765. Hãy bật file MO_CINEMA_NOVA_CLOUD.bat (V1.6) trên máy đang dùng, cho phép Chrome truy cập mạng nội bộ khi được hỏi, rồi thử lại.");
-      }
-      throw err;
-    } finally {clearTimeout(timeoutId);}
-  }
-  async function check(){
-    checkBtn.disabled=true;say("Đang kiểm tra cầu nối CINEMA NOVA...");
-    try{
-      const ping=await request("/bridge/ping",undefined,8000);
-      if(ping.version!=="1.6")throw new Error("Máy đang chạy phiên bản cầu nối cũ. Cần mở CINEMA NOVA Cloud Connector V1.6.");
-      const s=await request("/bridge/status",undefined,18000);
-      if(s.health?.extension_connected!==true)throw new Error("Cầu nối chạy nhưng tiện ích FlowKit chưa kết nối Google Flow. Kiểm tra Chrome và extension.");
-      connected=true;
-      say("✓ Đã kết nối FlowKit trên máy bạn. Có thể tạo video sau khi duyệt kịch bản.","ok");
-      step("FlowKit đã kết nối. Sẵn sàng tạo ảnh và video khi bạn xác nhận.");
-      if(jobId)resume(jobId);
-    }catch(e){connected=false;say("Chưa kết nối: "+e.message,"error");}
-    finally{checkBtn.disabled=false;updateButton();}
-  }
-  checkBtn.addEventListener("click",check);
-  scriptBtn.addEventListener("click",async()=>{
-    if(!connected){await check();if(!connected)return}
-    if(!String(el("idea").value).trim()){alert("Hãy nhập ý tưởng phim trước.");return}
-    scriptBtn.disabled=true;say("Gemini đang viết kịch bản, xin xem kết quả sau khi hoàn tất...");
-    try {
-      const d=await request("/bridge/script",{
-        idea:el("idea").value,genre:el("genre").value,
-        duration:Number(el("duration").value),characters:[el("character").value]
-      },100000);
-      scenes=d.scenes.map(x=>({action:String(x.visual||""),dialogue:String(x.audio||""),duration:Number(x.seconds||0)}));
-      markChanged();refresh();
-      say("✓ Kịch bản từ "+(d.provider||"AI")+" đã có lời thoại. Hãy đọc, chỉnh và duyệt.","ok");
-      el("script").scrollIntoView({behavior:"smooth"});
-    } catch(e){say("Chưa thể viết bằng AI: "+e.message,"error");}
-    finally{updateButton();}
-  });
-  async function imageData(){
-    const file=el("photo").files?.[0];
-    if(!file)return "";
-    if(file.size>1800000)throw new Error("Ảnh nhân vật vượt 1.8MB. Hãy chọn ảnh nhỏ hơn.");
-    if(!["image/jpeg","image/png","image/webp"].includes(file.type))throw new Error("Ảnh cần định dạng JPG, PNG hoặc WebP.");
-    return await new Promise((resolve,reject)=>{
-      const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error("Không đọc được ảnh nhân vật"));reader.readAsDataURL(file);
-    });
-  }
-  function mapData(photo){
-    return {
-      approved:true,title:el("title").value,idea:el("idea").value,
-      synopsis:el("idea").value,genre:el("genre").value,
-      duration:Number(el("duration").value),ratio:el("ratio").value,
-      characters:[{name:el("character").value.trim()||"Nhân vật chính",
-        description:"Nhân vật nhất quán trong mọi cảnh. "+el("idea").value.slice(0,350),
-        data:photo}],
-      scenes:scenes.map(s=>({seconds:Number(s.duration),visual:s.action,audio:s.dialogue}))
-    };
-  }
-  async function create(){
-    if(!approved)return alert("Bạn phải duyệt kịch bản trước khi tạo video.");
-    if(!connected){await check();if(!connected)return;}
-    if(jobId&&running)return;
-    const confirmText="XÁC NHẬN SẢN XUẤT\n\nGửi "+scenes.length+" cảnh vào FlowKit và Google Flow? Hành động này có thể tiêu lượt/credit tạo video của tài khoản Google.\n\nChọn OK để bắt đầu.";
-    if(!window.confirm(confirmText))return;
-    running=true;updateButton();step("Đang gửi dự án và các cảnh đã duyệt vào FlowKit...");player.style.display="none";downloadBtn.style.display="none";
-    try {
-      const photo=await imageData();
-      const receipt=await request("/bridge/publish",mapData(photo),120000);
-      step("✓ Đã gửi "+scenes.length+" cảnh. Đang bắt đầu hàng đợi sản xuất...");
-      const job=await request("/bridge/start",{receipt:receipt.receipt,confirmed:true},30000);
-      jobId=job.job_id;sessionStorage.setItem("cinemanova-job",jobId);
-      resume(jobId);
-    }catch(e){running=false;step("✕ Không thể bắt đầu: "+e.message);updateButton();}
-  }
-  makeBtn.addEventListener("click",create);
-  async function resume(id){
-    running=true;updateButton();step("Đang đọc tiến độ FlowKit...");
-    for(;;){
-      if(document.visibilityState==="hidden"){await new Promise(r=>setTimeout(r,15000));}
-      try{
-        const response=await request("/bridge/job?job_id="+encodeURIComponent(id),undefined,12000);
-        const job=response.job||{};
-        step("Tác vụ "+id.slice(0,8)+" • "+(job.progress||job.step||"Đang thực hiện"));
-        if(job.status==="completed"){
-          running=false;jobId="";sessionStorage.removeItem("cinemanova-job");
-          player.src=LOCAL+job.output;player.style.display="block";
-          downloadBtn.style.display="inline-block";
-          downloadBtn.onclick=()=>downloadVideo(LOCAL+job.output,id);
-          step("✓ Đã ghép MP4 trên máy tính. Có thể xem và tải video bên dưới.");
-          updateButton();return;
-        }
-        if(job.status==="failed"||job.status==="clips_ready"){
-          running=false;jobId="";sessionStorage.removeItem("cinemanova-job");
-          step(job.status==="failed"?"✕ Tạo phim lỗi: "+(job.error||"Không rõ nguyên nhân"):"Các clip đã hoàn thành trong FlowKit nhưng chưa ghép MP4. Kiểm tra FFmpeg trên máy.");
-          updateButton();return;
-        }
-      }catch(e){running=false;jobId="";sessionStorage.removeItem("cinemanova-job");step("Không lấy được tiến độ: "+e.message);updateButton();return;}
-      await new Promise(r=>setTimeout(r,8000));
-    }
-  }
-  async function downloadVideo(url,id){
-    try{downloadBtn.disabled=true;const r=await fetch(url,{mode:"cors"});if(!r.ok)throw new Error("HTTP "+r.status);const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download="cinema-nova-"+id.slice(0,8)+".mp4";document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}
-    catch(e){alert("Không tải được MP4: "+e.message)}finally{downloadBtn.disabled=false}
-  }
-  updateButton();
-  // Probe once on page load; network permission may be requested by the browser.
-  check();
-})();
-</script></body></html>
+</script><script src="cloud-connector.js" defer></script></body></html>
