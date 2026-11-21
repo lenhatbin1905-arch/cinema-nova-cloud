@@ -1,0 +1,15 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.py[cod]
+.DS_Store
+*.sqlite3
+workspace/
+media/
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3
+!samples/README.md

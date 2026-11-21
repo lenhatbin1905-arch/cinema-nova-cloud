@@ -1,0 +1,9 @@
+services:
+  vietframe:
+    build: .
+    ports:
+      - '127.0.0.1:8010:8010'
+    volumes:
+      - ./workspace:/data
+    restart: unless-stopped
+    mem_limit: 2g

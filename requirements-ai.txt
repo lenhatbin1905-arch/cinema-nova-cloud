@@ -1,0 +1,5 @@
+-r requirements.txt
+# Optional, CPU-compatible offline transcription: downloads model once.
+faster-whisper>=1.1,<2
+# Optional offline translation: language pair packages must be installed separately.
+argostranslate>=1.9,<2
