@@ -1,14 +1,14 @@
-# VietFrame Studio (v0.1) — Free-first local video workspace
+# VietFrame Studio (v0.3) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
-> Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Chạy local-only; chưa có auth, quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa watermark bằng AI.
+> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Chạy local-only; chưa có auth, quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa watermark bằng AI.
 
 ## Có thể dùng ngay khi cài đủ thành phần
 
 - Nhập URL công khai từ 6 nền tảng: Facebook, YouTube, TikTok, Douyin, Bilibili, Instagram qua **yt-dlp**. Tính khả dụng từng link có thể thay đổi theo nền tảng; không bypass nội dung riêng tư/DRM.
 - Upload MP4/MOV/WEBM/MKV; xác minh nội dung video với `ffprobe`, giới hạn tối đa 350 MB và 30 phút.
-- Quản lý dự án SQLite, tình trạng tác vụ thật, biên tập từng câu với timestamp, xuất `.srt`.
+- Quản lý dự án SQLite, tác vụ độc quyền theo dự án (chống bấm đúp/tranh chấp), khôi phục sau lỗi/khởi động lại, biên tập từng câu với timestamp, xuất `.srt`.
 - Tùy chỉnh font, cỡ, màu, viền, đậm, vị trí; xuất video MP4 gắn phụ đề bằng FFmpeg+ASS. Unicode tiếng Việt được giữ nguyên.
 - Gợi ý màu chữ từ vùng dưới của 1 khung video: **chỉ là gợi ý màu, KHÔNG nhận dạng font chính xác**.
 - API tích hợp Whisper và Argos Translate offline: **chỉ hoạt động sau khi cài model / gói ngôn ngữ**.
@@ -52,7 +52,7 @@ pip install -r requirements-ai.txt
 
 ## Font giống video gốc
 
-Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.1 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
+Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.3 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
 
 ## Quyền sử dụng và an toàn
 

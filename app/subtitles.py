@@ -1,5 +1,6 @@
 """SRT and ASS subtitle generation with Vietnamese Unicode support."""
 import re
+import math
 from html import escape as html_escape
 
 HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -19,8 +20,9 @@ def verify_segments(segments, max_duration=3600):
     for item in segments:
         start = float(item['start'])
         end = float(item['end'])
-        text = str(item['text']).strip()
-        if not (0 <= start < end <= max_duration + 0.3):
+        text = str(item['text']).replace('\r','').replace('\x00','').strip()
+        text = ''.join(ch for ch in text if ch in '\n\t' or ord(ch) >= 32)
+        if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= max_duration + 0.3):
             raise ValueError('Thời gian câu phụ đề không hợp lệ.')
         if not text or len(text) > 500:
             raise ValueError('Mỗi câu phải có từ 1 đến 500 ký tự.')

@@ -2,7 +2,7 @@
 'use strict';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
-const state = { projects: [], selected: null, capabilities: null, polling: null, view: 'projects' };
+const state = { projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source' };
 const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
 const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating'];
 
@@ -12,7 +12,8 @@ function toast(message, error=false) {
 }
 async function request(url, options = {}) {
   const response = await fetch(url, options);
-  let body; try { body = await response.json(); } catch { body = {detail: await response.text()}; }
+  const raw = await response.text();
+  let body; try { body = JSON.parse(raw); } catch { body = {detail: raw.slice(0,500) || `HTTP ${response.status}`}; }
   if (!response.ok) {
     const detail = body.detail;
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail || `HTTP ${response.status}`));
@@ -87,13 +88,43 @@ function renderProjects() {
 async function loadProjects() { try {state.projects=await request('/api/projects');renderProjects();}catch(e){showError(e);} }
 async function selectProject(pid) {
   if (!pid) { state.selected=null;showProject(null);return; }
-  try { state.selected=await request('/api/projects/'+pid); showProject(state.selected);switchView('editor');managePolling(); }
+  try { state.preview='source';state.selected=await request('/api/projects/'+pid); showProject(state.selected);switchView('editor');managePolling(); }
   catch(e) {showError(e);}
 }
+function updateCaptionOverlay(){
+  const overlay=$('#caption-overlay');
+  const player=$('#player');
+  if (!state.selected || !player.videoWidth || (state.preview==='export' && !!state.selected.export_url)) {overlay.textContent='';return;}
+  let active=null;
+  try { active=collectSegments().find(seg=>Number.isFinite(seg.start)&&Number.isFinite(seg.end)&&
+    seg.start<=player.currentTime && seg.end>player.currentTime && seg.text); }
+  catch { overlay.textContent='';return; }
+  if (!active) {overlay.textContent='';return;}
+  const style=currentStyle();
+  const box=player.getBoundingClientRect(),screen=$('.screen').getBoundingClientRect();
+  const scale=Math.min(box.width/player.videoWidth,box.height/player.videoHeight);
+  const visibleHeight=player.videoHeight*scale;
+  overlay.style.bottom=(Math.max(0,(screen.height-visibleHeight)/2) + Math.max(0,style.margin_v)*scale)+'px';
+  overlay.style.fontSize=Math.max(10,style.font_size*scale)+'px';
+  overlay.style.fontWeight=style.bold?'800':'400';
+  overlay.style.fontFamily='"'+style.font.replace(/"/g,'')+'",sans-serif';
+  overlay.style.color=style.color;
+  overlay.style.webkitTextStroke=Math.min(7,style.outline*scale)+'px '+style.outline_color;
+  overlay.style.paintOrder='stroke fill';
+  overlay.textContent=active.text;
+}
+
 function showProject(p) {
   $('#project-select').value = p?.id || '';
-  $('#player').hidden = !p?.video_url;$('#screen-empty').classList.toggle('hidden',!!p?.video_url);
-  if (p?.video_url && $('#player').getAttribute('src') !== p.video_url) { $('#player').src=p.video_url;$('#player').load(); }
+  const playingExport = state.preview==='export' && !!p?.export_url;
+  const url = playingExport ? p.export_url : p?.video_url;
+  $('#player').hidden = !url;$('#screen-empty').classList.toggle('hidden',!!url);
+  if (url && $('#player').getAttribute('src') !== url) { $('#player').src=url;$('#player').load(); }
+  $('#show-source').disabled = !p?.video_url;
+  $('#show-export').disabled = !p?.export_url;
+  $('#show-source').classList.toggle('active',!playingExport);
+  $('#show-export').classList.toggle('active',playingExport);
+  $('#recover-current').classList.toggle('hidden',p?.status!=='error' || !p?.video_url);
   if (!p) {$('#player').removeAttribute('src');$('#player').load();}
   text($('#project-status'),p ? (statusText[p.status]||p.status):'Chưa chọn');
   text($('#project-message'),p ? `${p.message || 'Video đã được nạp.'}  ${ongoing.includes(p.status) ? `(${p.progress}%)` : ''}` : 'Chọn một dự án để thao tác.');
@@ -108,6 +139,7 @@ function showProject(p) {
   ['render-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
   $('#dub-button').disabled=!editable||!state.capabilities?.tts_kokoro_local;
   renderSegments(p?.segments||[]);
+  updateCaptionOverlay();
 }
 function makeInput(type,value,cls){const input=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')input.type=type;input.className=cls;input.value=value;return input;}
 function addSegment(seg = {start:0,end:2.5,text:''}) {
@@ -186,7 +218,7 @@ function updateStylePreview(){const s=currentStyle(),el=$('#style-demo-text');el
 async function refreshCurrent(){
   if(!state.selected)return;
   try {const prev=state.selected;const p=await request('/api/projects/'+prev.id);
-    state.selected=p;const changed=JSON.stringify(p.segments)!==JSON.stringify(prev.segments);
+    state.selected=p;const changed=JSON.stringify(p.segments)!==JSON.stringify(prev.segments) || p.export_url!==prev.export_url || p.video_url!==prev.video_url;
     // Do not discard unsaved edits on each poll. Only rerender segment fields when a job changes their data.
     if(changed || p.status==='ready'&&prev.status!==p.status) showProject(p);
     else {text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
@@ -219,6 +251,14 @@ function init(){
   $('#refresh-projects').addEventListener('click',loadProjects);
   $('#project-select').addEventListener('change',e=>selectProject(e.target.value));
   $('#refresh-current').addEventListener('click',refreshCurrent);
+  $('#show-source').addEventListener('click',()=>{state.preview='source';showProject(state.selected);});
+  $('#show-export').addEventListener('click',()=>{if(state.selected?.export_url){state.preview='export';showProject(state.selected);}});
+  $('#recover-current').addEventListener('click',async()=>{
+    try{if(!state.selected)throw new Error('Chưa chọn dự án.');
+      const p=await apiPost('/api/projects/'+state.selected.id+'/recover',{});
+      state.selected=p;showProject(p);toast('Đã khôi phục dự án.');await loadProjects();
+    }catch(e){showError(e);}
+  });
   $('#add-segment').addEventListener('click',()=>addSegment({start: Math.max(0,(state.selected?.duration||5)-3),end:state.selected?.duration||5,text:''}));
   $('#save-segments').addEventListener('click',()=>saveSegments().catch(showError));
   $('#render-button').addEventListener('click',renderVideo);
@@ -227,7 +267,12 @@ function init(){
   $('#suggest-style').addEventListener('click',suggestStyle);
   $('#dub-button').addEventListener('click',dubAudio);
   $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style'); }));
-  ['style-font','style-size','style-color','style-outline-color','style-outline','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',updateStylePreview));
+  ['style-font','style-size','style-color','style-outline-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
+  $('#segments').addEventListener('input',updateCaptionOverlay);
+  $('#player').addEventListener('timeupdate',updateCaptionOverlay);
+  $('#player').addEventListener('loadedmetadata',updateCaptionOverlay);
+  $('#player').addEventListener('seeked',updateCaptionOverlay);
+  window.addEventListener('resize',updateCaptionOverlay);
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
   updateStylePreview();loadProjects();loadCapabilities();

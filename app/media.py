@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -30,6 +31,8 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
     if not installed('ffmpeg'):
         raise RuntimeError('Chưa cài FFmpeg trên máy chủ.')
     # Chdir to the per-project directory, so all filter input names are safe basename literals.
+    temporary = output.with_name(output.stem+'.partial'+output.suffix)
+    temporary.unlink(missing_ok=True)
     cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
            '-i', source.name]
     if audio:
@@ -40,8 +43,13 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
     else:
         cmd += ['-map', '0:a?', '-c:a', 'aac']
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt','yuv420p',
-            '-movflags','+faststart', output.name]
-    result = subprocess.run(cmd, cwd=source.parent, capture_output=True, text=True, timeout=1800)
-    if result.returncode or not output.exists():
-        raise RuntimeError('Xuất video thất bại: '+result.stderr[-900:])
-    return output
+            '-movflags','+faststart', temporary.name]
+    try:
+        result = subprocess.run(cmd, cwd=source.parent, capture_output=True, text=True, timeout=1800)
+        if result.returncode or not temporary.is_file():
+            raise RuntimeError('Xuất video thất bại: '+result.stderr[-900:])
+        probe(temporary)
+        os.replace(temporary,output)
+        return output
+    finally:
+        temporary.unlink(missing_ok=True)

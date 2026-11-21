@@ -70,3 +70,48 @@ def _asdict(row):
     obj = dict(row)
     obj['segments'] = json.loads(obj.pop('segments_json'))
     return obj
+
+
+def claim_ready_project(project_id, status, message):
+    """Atomically claim a job. Two rapid clicks cannot start competing renders."""
+    with _connect() as con:
+        row = con.execute(
+            "UPDATE projects SET status=?, progress=1, message=?, output_file=CASE WHEN ?='rendering' THEN NULL ELSE output_file END, updated_at=? "
+            "WHERE id=? AND status='ready' RETURNING id",
+            (status, message, status, now(), project_id),
+        ).fetchone()
+        return row is not None
+
+
+def save_segments_if_ready(project_id, segments):
+    """Keep finished dubbing when captions are unchanged; invalidate derived media on edits."""
+    encoded = json.dumps(segments, ensure_ascii=False)
+    with _connect() as con:
+        con.execute('BEGIN IMMEDIATE')
+        row = con.execute('SELECT status, segments_json FROM projects WHERE id=?', (project_id,)).fetchone()
+        if not row or row['status'] != 'ready':
+            return False, False
+        if json.loads(row['segments_json']) == segments:
+            return True, False
+        con.execute('UPDATE projects SET segments_json=?, output_file=NULL, dub_file=NULL, '
+                    'message=?, updated_at=? WHERE id=?',
+                    (encoded, 'Đã lưu phụ đề mới; cần xuất lại MP4 và giọng đọc.', now(), project_id))
+        return True, True
+
+
+def mark_interrupted_jobs():
+    """On restart report jobs lost by the in-process executor; never leave fake progress."""
+    with _connect() as con:
+        con.execute("UPDATE projects SET status='error', progress=0, "
+                    "message='Tác vụ bị gián đoạn do máy chủ khởi động lại. Có thể khôi phục dự án nếu video nguồn còn.', "
+                    "updated_at=? WHERE status IN ('queued','downloading','transcribing','translating','rendering','dubbing','generating')",
+                    (now(),))
+
+
+def recover_project(project_id):
+    """Recover an interrupted/failed project when an importable source file exists."""
+    with _connect() as con:
+        changed=con.execute("UPDATE projects SET status='ready', progress=100, message=?, updated_at=? "
+                            "WHERE id=? AND status='error' AND video_file IS NOT NULL",
+                            ('Đã khôi phục để tiếp tục biên tập. Kiểm tra lại nội dung trước khi xuất.', now(),project_id))
+        return bool(changed.rowcount)

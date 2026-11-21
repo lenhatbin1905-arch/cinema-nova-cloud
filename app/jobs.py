@@ -76,7 +76,7 @@ def transcription(pid):
     db.update(pid,status='transcribing',progress=15,message='Whisper đang phân tích lời thoại…')
     source = path_for(pid)/data['video_file']
     segments = engines.transcribe(source)
-    db.update(pid,segments_json=json.dumps(segments,ensure_ascii=False),status='ready',progress=100,
+    db.update(pid,segments_json=json.dumps(segments,ensure_ascii=False),output_file=None,dub_file=None,status='ready',progress=100,
               message=f'Đã nhận dạng {len(segments)} câu. Kiểm tra trước khi xuất.')
 
 
@@ -86,7 +86,7 @@ def translation(pid, source_language, target_language):
         raise ValueError('Chưa có câu phụ đề để dịch.')
     db.update(pid,status='translating',progress=12,message='Đang dịch bằng mô hình offline…')
     result=engines.translate_segments(data['segments'],source_language,target_language)
-    db.update(pid,segments_json=json.dumps(result,ensure_ascii=False),status='ready',progress=100,
+    db.update(pid,segments_json=json.dumps(result,ensure_ascii=False),output_file=None,dub_file=None,status='ready',progress=100,
               message='Đã dịch. Hãy kiểm tra từ ngữ và font trước khi xuất.')
 
 
@@ -100,7 +100,10 @@ def render(pid, style):
     folder=path_for(pid)
     source=folder/data['video_file']
     ass=folder/'subtitles.ass'
-    ass.write_text(make_ass(segments,style),encoding='utf-8-sig')
+    metadata = probe(source)
+    video_stream = next(s for s in metadata['streams'] if s.get('codec_type') == 'video')
+    resolution = (int(video_stream['width']), int(video_stream['height']))
+    ass.write_text(make_ass(segments,style,resolution=resolution),encoding='utf-8-sig')
     (folder/'subtitles.srt').write_text(make_srt(segments),encoding='utf-8-sig')
     output=folder/'export.mp4'
     db.update(pid,status='rendering',progress=10,message='FFmpeg đang xuất MP4, vui lòng giữ ứng dụng chạy…')

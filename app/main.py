@@ -5,7 +5,7 @@ import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,11 +19,29 @@ from .style_match import sample_reference_style
 @asynccontextmanager
 async def lifespan(app):
     db.init_db()
+    db.mark_interrupted_jobs()
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.1.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.3.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
+
+
+@app.middleware('http')
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    )
+    response.headers['Cache-Control'] = 'no-store' if request.url.path.startswith('/api/') else 'no-cache'
+    return response
+
 
 
 @app.get('/')
@@ -33,7 +51,7 @@ def homepage():
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','version':'0.1.0','mode':'local-first'}
+    return {'status':'ok','version':'0.3.0','mode':'local-first'}
 
 
 @app.get('/api/capabilities')
@@ -120,7 +138,13 @@ def save_segments(pid: str,req: SegmentRequest):
         cleaned=verify_segments([x.model_dump() for x in req.segments],p['duration'])
     except (ValueError,TypeError,KeyError) as exc:
         raise HTTPException(422,str(exc)) from exc
-    db.update(pid,segments_json=json.dumps(cleaned,ensure_ascii=False))
+    accepted, changed = db.save_segments_if_ready(pid, cleaned)
+    if not accepted:
+        raise HTTPException(409,'Dự án đang xử lý. Thử lại sau khi tác vụ hoàn thành.')
+    if changed:
+        folder = config.PROJECTS_DIR / pid
+        (folder / 'dub.wav').unlink(missing_ok=True)
+        (folder / 'export.mp4').unlink(missing_ok=True)
     return _shape(_find(pid))
 
 
@@ -130,6 +154,7 @@ def transcribe(pid: str):
     _ensure_editable(p)
     if not engines.capabilities()['offline_transcription']:
         raise HTTPException(503,'Whisper offline chưa được cài. Xem hướng dẫn cài AI miễn phí.')
+    _claim(pid,'transcribing','Đã xếp hàng nhận diện lời thoại.')
     jobs.submit(pid,jobs.transcription)
     return {'accepted':True,'project_id':pid}
 
@@ -147,6 +172,7 @@ def translate(pid: str,req: TranslateRequest):
         raise HTTPException(422,'Chưa có phụ đề để dịch.')
     if not engines.capabilities()['offline_translation']:
         raise HTTPException(503,'Argos Translate offline chưa được cài.')
+    _claim(pid,'translating','Đã xếp hàng dịch phụ đề.')
     jobs.submit(pid,jobs.translation,req.source_language,req.target_language)
     return {'accepted':True,'project_id':pid}
 
@@ -169,6 +195,7 @@ def render(pid: str,style: SubtitleStyle):
         raise HTTPException(422,'Cần nhập ít nhất một câu phụ đề.')
     if not engines.capabilities()['ffmpeg']:
         raise HTTPException(503,'Chưa có FFmpeg/ffprobe.')
+    _claim(pid,'rendering','Đã xếp hàng xuất MP4.')
     jobs.submit(pid,jobs.render,style.model_dump())
     return {'accepted':True,'project_id':pid}
 
@@ -195,6 +222,7 @@ def dub_video(pid: str,request: DubRequest):
         raise HTTPException(422,'Cần có phụ đề đã dịch trước khi lồng tiếng.')
     if not engines.kokoro_is_ready():
         raise HTTPException(503,'KokoroTTS chưa chạy trên máy cục bộ.')
+    _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')
     jobs.submit(pid,jobs.dubbing,request.voice)
     return {'accepted':True,'project_id':pid}
 
@@ -254,6 +282,24 @@ def _find(pid):
     return p
 
 
+def _claim(pid, status, message):
+    if not db.claim_ready_project(pid,status,message):
+        raise HTTPException(409,'Dự án đang xử lý. Chỉ có thể chạy một tác vụ tại một thời điểm.')
+
+
+@app.post('/api/projects/{pid}/recover')
+def recover(pid: str):
+    p=_find(pid)
+    if p['status'] != 'error' or not p.get('video_file'):
+        raise HTTPException(409,'Chỉ khôi phục được dự án lỗi có video nguồn.')
+    source=config.PROJECTS_DIR / pid / p['video_file']
+    if not source.is_file():
+        raise HTTPException(409,'Video nguồn không còn tồn tại. Hãy nhập lại từ đầu.')
+    if not db.recover_project(pid):
+        raise HTTPException(409,'Dự án đã thay đổi trạng thái; hãy tải lại.')
+    return _shape(_find(pid))
+
+
 def _ensure_editable(p):
     if p['status']!='ready':
         raise HTTPException(409,'Dự án đang xử lý hoặc gặp lỗi; hãy kiểm tra trạng thái trước.')
@@ -261,5 +307,5 @@ def _ensure_editable(p):
 
 def _shape(p):
     return {**p,'video_url':f'/api/projects/{p["id"]}/file/source' if p['video_file'] else None,
-            'export_url':f'/api/projects/{p["id"]}/file/export' if p['output_file'] else None,
+            'export_url':f'/api/projects/{p["id"]}/file/export?updated={p["updated_at"]}' if p['output_file'] else None,
             'dub_url':f'/api/projects/{p["id"]}/file/dub' if p.get('dub_file') else None}
