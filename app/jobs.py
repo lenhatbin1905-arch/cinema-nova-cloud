@@ -1,5 +1,6 @@
 """Actual asynchronous media processing, local worker. No fake progress/success."""
 import json
+import hashlib
 import logging
 import math
 import shutil
@@ -188,14 +189,20 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     timing_report=[]
     db.update(pid,status='dubbing',progress=5,message='Đang tạo giọng Việt bằng '+provider+'…')
     for index,seg in enumerate(segments):
-        raw=folder / (f'voice-{index:03}.wav' if provider == 'kokoro' else f'voice-{index:03}.mp3')
         processed=folder/f'voice-align-{index:03}.wav'
         speak=seg.get('voice_text') or seg['text']
         chosen_voice=voice_map.get(seg.get('speaker','spk1'),voice)
-        if provider == 'elevenlabs':
-            eleven.synthesize(speak, chosen_voice, raw)
-        else:
-            engines.kokoro_synthesize(speak,chosen_voice,raw)
+        # Stable cache across failed retries, but never reuse audio from another
+        # provider, voice, or script revision. Avoid repeated paid TTS calls.
+        cache_key=hashlib.sha256(json.dumps([provider,chosen_voice,speak],ensure_ascii=False).encode('utf-8')).hexdigest()[:24]
+        ext='mp3' if provider == 'elevenlabs' else 'wav'
+        raw=folder/f'voice-cache-{cache_key}.{ext}'
+        if not raw.is_file() or raw.stat().st_size == 0:
+            raw.unlink(missing_ok=True)
+            if provider == 'elevenlabs':
+                eleven.synthesize(speak, chosen_voice, raw)
+            else:
+                engines.kokoro_synthesize(speak,chosen_voice,raw)
         # Measure the actual TTS waveform rather than guessing duration from
         # text length. Keep every spoken word; time-stretch with pitch preservation.
         from subprocess import run
@@ -255,7 +262,9 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     if result.returncode or not combined.exists():
         raise RuntimeError('Ghép giọng thất bại: '+result.stderr[-300:])
     (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
-    for file in list(folder.glob('voice-*.wav'))+list(folder.glob('voice-align-*.wav'))+list(folder.glob('voice-*.mp3')):
+    # Keep verified TTS audio cached so retrying export never spends credits
+    # synthesizing the same sentence again. Remove only generated alignment files.
+    for file in folder.glob('voice-align-*.wav'):
         file.unlink(missing_ok=True)
     warnings=sum(bool(c['quality_warning']) for c in timing_report)
     info=f' · {warnings} câu đã tăng tốc để khớp hình, cần nghe lại' if warnings else ''
