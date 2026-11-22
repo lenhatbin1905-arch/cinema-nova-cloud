@@ -24,4 +24,6 @@ jobs:
       - name: Test Python, APIs, and real FFmpeg rendering
         run: python -m pytest -q
       - name: Verify JavaScript syntax
-        run: node --check static/app.js
+        run: |
+          node --check static/app.js
+          node --check static/login.js
