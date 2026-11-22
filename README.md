@@ -184,3 +184,8 @@ Bản vá đọc JSON lỗi thật từ HTTP streaming của ElevenLabs, phân b
 ## Kiểm thử trong Docker từ v0.13
 
 Render build chạy `compileall`, `node --check static/app.js` và `pytest -q tests` trước khi triển khai, bao gồm test phân loại lỗi ElevenLabs 402, bảo mật session và điều kiện xuất MP4 thay thế. Nếu test lỗi, bản cũ tiếp tục phục vụ cho đến khi sửa. `VIETFRAME_CREDENTIALS_DATABASE_URL` chỉ được cấp ở runtime Render, không nằm trong hình Docker build hoặc GitHub.
+
+
+## v0.14 Gemini transient overload / sticky failed project
+
+Google có thể trả 503 cho Gemini Free Tier ngay cả khi API key hợp lệ. Tự thử lại tối đa 2 lần (chờ 2 giây rồi 4 giây) chỉ với 502/503/504, không thử lại 429 hoặc tự chuyển model trả phí. Sau lỗi, video và phụ đề đã lưu không bị xóa; nút **Thử lại Gemini** có thể nhận tác vụ trực tiếp từ trạng thái lỗi. Máy chủ chuyển trạng thái theo phép cập nhật nguyên tử để tránh hai lượt Gemini chạy trùng nhau. UI cập nhật trạng thái nút qua polling, không reset nội dung phụ đề chưa lưu. Đây là khôi phục lỗi tạm thời, không phải cam kết Google không còn 503.

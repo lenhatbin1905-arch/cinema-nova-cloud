@@ -196,6 +196,8 @@ function showProject(p) {
   $('#show-source').classList.toggle('active',!playingExport);
   $('#show-export').classList.toggle('active',playingExport);
   $('#recover-current').classList.toggle('hidden',p?.status!=='error' || !p?.video_url);
+  $('#retry-gemini-button').classList.toggle('hidden',
+    !(p?.status==='error'&&p?.video_url&&/Gemini|Google.*(503|502|504)|quá tải/i.test(p?.message||'')));
   const canRetryOriginal=!!p?.video_url && p?.status==='error' &&
     /ElevenLabs|HTTP 402|voice|giọng/i.test(p?.message||'');
   $('#video-recovery-actions').classList.toggle('hidden',!canRetryOriginal);
@@ -215,7 +217,8 @@ function showProject(p) {
   if(p?.dub_file) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
   const editable=p?.status==='ready';
   $('#gemini-prerequisite').classList.toggle('hidden',!!p?.video_url);
-  ['render-button','complete-video-button','gemini-script-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
+  ['render-button','complete-video-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
+  $('#gemini-script-button').disabled=!(p?.video_url&&(p.status==='ready'||p.status==='error'));
   $('#dub-button').disabled=!editable||$('#voice-provider').value==='original'||!$('#dub-voice').value;
   state.cleanupDraft = p?.cleanup_regions?.map(r=>({...r})) || [];
   renderCleanupList();
@@ -515,7 +518,16 @@ async function refreshCurrent(){
     state.selected=p;const changed=JSON.stringify(p.segments)!==JSON.stringify(prev.segments) || p.export_url!==prev.export_url || p.video_url!==prev.video_url;
     // Do not discard unsaved edits on each poll. Only rerender segment fields when a job changes their data.
     if(changed || p.status==='ready'&&prev.status!==p.status) showProject(p);
-    else {text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';renderJobProgress(p);$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
+    else {
+      // Refresh buttons on server status changes without wiping unsaved editor text.
+      const editable=p.status==='ready';
+      $('#gemini-script-button').disabled=!(p.video_url&&(editable||p.status==='error'));
+      ['render-button','complete-video-button','save-segments','transcribe','translate','add-segment']
+        .forEach(id=>{document.getElementById(id).disabled=!editable;});
+      $('#recover-current').classList.toggle('hidden',p.status!=='error'||!p.video_url);
+      $('#retry-gemini-button').classList.toggle('hidden',
+        !(p.status==='error'&&p.video_url&&/Gemini|Google.*(503|502|504)|quá tải/i.test(p.message||'')));
+      text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';renderJobProgress(p);$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
     if(prev.status!==p.status&&p.status==='error')toast(p.message,true);
     if(prev.status!==p.status&&p.status==='ready')toast(p.message||'Đã xử lý xong.');
     managePolling();
@@ -602,6 +614,7 @@ function init(){
   $('#video-url').addEventListener('input',detectLinkPlatform);
   $('#transcribe').addEventListener('click',transcribe);
   $('#gemini-script-button').addEventListener('click',analyzeGeminiScript);
+  $('#retry-gemini-button').addEventListener('click',analyzeGeminiScript);
   $('#gemini-link-form').addEventListener('submit',linkGemini);
   $('#gemini-disconnect').addEventListener('click',unlinkGemini);
   $('#translate').addEventListener('click',translate);

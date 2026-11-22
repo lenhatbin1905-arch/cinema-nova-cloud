@@ -99,3 +99,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .video-recovery-actions .secondary-btn{width:fit-content;max-width:100%;white-space:normal;text-align:center}
 .video-recovery-actions p{font-size:11px;line-height:1.55;margin:0;color:#75654d}
 .voice-free-warning{border-left:3px solid #c7ae75;padding-left:11px}
+
+/* User-initiated recovery from upstream Gemini 503 while retaining saved work. */
+#retry-gemini-button:not(.hidden){margin:12px 0;padding:12px 15px;width:100%;white-space:normal;text-align:center;background:#fffaf0;color:#694d2a;border:1px solid #dac19b}
+#retry-gemini-button:not(.hidden):hover{background:#fbefd9}
