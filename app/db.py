@@ -18,12 +18,14 @@ def init_db():
           id TEXT PRIMARY KEY, title TEXT NOT NULL, source TEXT NOT NULL,
           source_url TEXT, status TEXT NOT NULL, progress INTEGER NOT NULL DEFAULT 0,
           message TEXT NOT NULL DEFAULT '', video_file TEXT, output_file TEXT,
-          segments_json TEXT NOT NULL DEFAULT '[]', duration REAL DEFAULT 0, dub_file TEXT,
+          segments_json TEXT NOT NULL DEFAULT '[]', duration REAL DEFAULT 0, dub_file TEXT, cleanup_json TEXT NOT NULL DEFAULT '[]',
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )''')
         cols={r[1] for r in con.execute('PRAGMA table_info(projects)').fetchall()}
         if 'dub_file' not in cols:
             con.execute('ALTER TABLE projects ADD COLUMN dub_file TEXT')
+        if 'cleanup_json' not in cols:
+            con.execute("ALTER TABLE projects ADD COLUMN cleanup_json TEXT NOT NULL DEFAULT '[]'")
 
 
 def now():
@@ -69,6 +71,7 @@ def all_projects():
 def _asdict(row):
     obj = dict(row)
     obj['segments'] = json.loads(obj.pop('segments_json'))
+    obj['cleanup_regions'] = json.loads(obj.pop('cleanup_json', '[]'))
     return obj
 
 
@@ -97,6 +100,19 @@ def save_segments_if_ready(project_id, segments):
                     'message=?, updated_at=? WHERE id=?',
                     (encoded, 'Đã lưu phụ đề mới; cần xuất lại MP4 và giọng đọc.', now(), project_id))
         return True, True
+
+
+def save_cleanup_if_ready(project_id, regions):
+    encoded = json.dumps(regions)
+    with _connect() as con:
+        con.execute('BEGIN IMMEDIATE')
+        row = con.execute('SELECT status, cleanup_json FROM projects WHERE id=?', (project_id,)).fetchone()
+        if not row or row['status'] != 'ready':
+            return False
+        if row['cleanup_json'] != encoded:
+            con.execute('UPDATE projects SET cleanup_json=?, output_file=NULL, updated_at=? WHERE id=?',
+                        (encoded, now(), project_id))
+    return True
 
 
 def mark_interrupted_jobs():

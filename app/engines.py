@@ -23,6 +23,8 @@ def capabilities():
         'offline_transcription': available('faster_whisper'),
         'offline_translation': available('argostranslate'),
         'tts_kokoro_local': kokoro_is_ready(),
+        'elevenlabs_link_supported': True,
+        'static_text_cleanup': True,
         'ai_video_local': bool(config.ENABLE_LOCAL_VIDEO_GEN and gpu and available('diffusers')),
         'gpu': gpu,
         'note': 'Không có API trả phí. Tính năng chỉ chạy khi đã cài engine/model thật.'

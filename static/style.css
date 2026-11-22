@@ -34,3 +34,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .account-panel input{width:100%;border-radius:7px;background:white;border:1px solid #d5e1d6;padding:11px 13px;color:#23392e}
 .account-panel button{margin-top:8px;max-width:220px}
 @media(max-width:760px){.account-email{display:none}.logout-button{font-size:10px;padding:7px 9px}}
+
+/* VietFrame v0.5: quiet, utility-first media tools */
+.cleanup-list{display:grid;gap:6px}.cleanup-row{padding:9px 11px;border:1px solid #e1e8dc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#526455;font-size:12px}.voice-row{flex-wrap:wrap}.voice-row select{max-width:100%;min-width:130px}.account-panel input[type=password]{max-width:100%;width:100%;padding:11px;border:1px solid #dfe5dd;border-radius:7px;margin:8px 0 13px}.account-panel a{text-decoration:underline;color:#315b4e}
+
+.screen{position:relative}#cleanup-overlay{position:absolute;display:none;border:2px dashed #e6d092;background:#e6d09227;pointer-events:none;z-index:3;box-shadow:0 0 0 1px #1f241f55 inset}#caption-overlay{z-index:2}

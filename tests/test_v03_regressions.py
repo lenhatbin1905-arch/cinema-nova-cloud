@@ -78,7 +78,7 @@ def test_response_security_headers_and_version(client):
     assert response.headers['X-Frame-Options']=='DENY'
     assert 'object-src' in response.headers['Content-Security-Policy']
     assert response.headers['X-Content-Type-Options']=='nosniff'
-    assert client.get('/api/health').json()['version']=='0.4.0'
+    assert client.get('/api/health').json()['version']=='0.5.0'
     assert client.get('/api/projects').headers['Cache-Control']=='no-store'
 
 

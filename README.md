@@ -1,8 +1,8 @@
-# VietFrame Studio (v0.4) — Free-first local video workspace
+# VietFrame Studio (v0.5) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
-> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Đã có trang đăng nhập, tài khoản chủ sở hữu duy nhất và bảo vệ API bằng cookie phiên + CSRF. Chưa có quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa chữ bằng AI.
+> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Đã có trang đăng nhập, tài khoản chủ sở hữu duy nhất và bảo vệ API bằng cookie phiên + CSRF. Chưa có quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa chữ bằng AI theo chuyển động. Bản này có FFmpeg delogo theo vùng cố định và kết nối ElevenLabs bằng API key được mã hóa.
 
 ## Có thể dùng ngay khi cài đủ thành phần
 
@@ -58,13 +58,13 @@ pip install -r requirements-ai.txt
 
 ## Font giống video gốc
 
-Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.4 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
+Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.5 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
 
 ## Quyền sử dụng và an toàn
 
 Chỉ nhập video mà bạn có quyền tải/chỉnh sửa hoặc được chủ sở hữu cho phép. Không sử dụng để xóa watermark nhằm mạo nhận quyền tác giả. Không gửi mật khẩu, cookie Facebook hoặc key API qua giao diện.
 
-**Chưa đủ điều kiện triển khai Internet công khai.** Bản v0.4 đã có xác thực một chủ sở hữu, băm PBKDF2, cookie HttpOnly/SameSite Strict, CSRF, khóa đăng ký sau tài khoản đầu tiên và chống brute force cơ bản. Khi đưa lên Internet cần HTTPS với `VIETFRAME_COOKIE_SECURE=true`, kiểm tra URL/redirect sâu hơn, chống SSRF toàn pipeline, giới hạn tác vụ/tải lên theo IP, backup database và file, giám sát chống lạm dụng, snapshot/restore và audit độc lập. Không chia sẻ tài khoản với nhiều người; dự án chưa tách biệt theo user. Docker expose local-only.
+**Chưa đủ điều kiện triển khai Internet công khai.** Bản v0.5 đã có xác thực một chủ sở hữu, băm PBKDF2, cookie HttpOnly/SameSite Strict, CSRF, khóa đăng ký sau tài khoản đầu tiên và chống brute force cơ bản. Khi đưa lên Internet cần HTTPS với `VIETFRAME_COOKIE_SECURE=true`, kiểm tra URL/redirect sâu hơn, chống SSRF toàn pipeline, giới hạn tác vụ/tải lên theo IP, backup database và file, giám sát chống lạm dụng, snapshot/restore và audit độc lập. Không chia sẻ tài khoản với nhiều người; dự án chưa tách biệt theo user. Docker expose local-only.
 
 ## API chính
 
@@ -89,7 +89,7 @@ Kiểm thử bao gồm xác thực/đăng xuất/đổi mật khẩu/khóa brute
 4. **Vietnamese dubbing**: pipeline Kokoro local đã có, còn cần trộn riêng thoại/nhạc, hỗ trợ multi-speaker, đánh giá giọng thực tế và lip-sync.
 5. **Frame inpainting**: xóa chữ gốc có kiểm soát và phép đo flicker/ghosting.
 6. **Cinema**: image-to-video, storyboard, nhiều cảnh, nhất quán nhân vật, GPU worker.
-7. **Production**: đăng nhập chủ sở hữu đã có ở v0.4; tiếp theo HTTPS, phân quyền nhiều người dùng, queues, object storage, CI, snapshots, restore, metrics và đánh giá bảo mật chuyên sâu.
+7. **Production**: đăng nhập chủ sở hữu đã có ở v0.5; tiếp theo HTTPS, phân quyền nhiều người dùng, queues, object storage, CI, snapshots, restore, metrics và đánh giá bảo mật chuyên sâu.
 
 Xem [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) để biết chuẩn nghiệm thu tránh tự chấm điểm quá lạc quan.
 
@@ -100,3 +100,27 @@ Xem [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) để biết chuẩn nghiệm thu t
 - Đổi mật khẩu trong **Hệ thống → Đổi mật khẩu**; thao tác này kết thúc toàn bộ phiên đăng nhập.
 - Mất mật khẩu: quản trị viên có quyền máy chủ chạy `python -m app.auth reset-owner-password` (hoặc `docker compose exec vietframe python -m app.auth reset-owner-password`). Hệ thống yêu cầu mật khẩu mới trong terminal rồi thu hồi mọi phiên đăng nhập. Không có mật khẩu mặc định hoặc cửa hậu.
 - Trên HTTPS, bắt buộc đặt `VIETFRAME_COOKIE_SECURE=true` và cấu hình reverse proxy chuyển scheme tin cậy.
+
+
+## Mới v0.5: Che chữ/logo rồi chèn phụ đề tiếng Việt
+
+- Mở Bàn biên tập → **Che chữ/logo** → chọn sẵn **Vùng phụ đề dưới** hoặc **Logo góc trên**, điều chỉnh X/Y/rộng/cao theo % khung hình. Bấm **Thêm vùng che**, tối đa 3 vùng, rồi **Lưu vùng che và xuất lại**; cuối cùng bấm **Xuất MP4**.
+- Hệ thống chạy FFmpeg `delogo` trên video nguồn **trước** khi ghi phụ đề ASS tiếng Việt; không để dải màu mờ phủ lên chữ mới. Có xem trước vị trí vùng lựa chọn bằng khung nét đứt.
+- `delogo` chỉ nội suy điểm ảnh xung quanh, không phải xóa chữ hoàn hảo bằng generative AI. Vùng quá lớn, chồng lên người/vật thể hoặc chữ chuyển động có thể méo, cần chỉnh vùng theo cảnh. Phiên bản này không nhận diện font gốc bằng AI hay tracking tự động.
+- Tạo/giữ phong cách font (màu, viền, cỡ, đậm và vị trí); font 1:1 phụ thuộc font gốc có sẵn và hỗ trợ dấu tiếng Việt.
+
+## Mới v0.5: Liên kết ElevenLabs 1 lần
+
+ElevenLabs REST API sử dụng **API key** chứ không cho VietFrame tái sử dụng tự động cookie đăng nhập ChatGPT/Google hay mật khẩu ElevenLabs. Trong trang **Cài đặt** → **Liên kết ElevenLabs**:
+
+1. Vào https://elevenlabs.io/app/settings/api-keys đăng nhập ElevenLabs và tạo API key với quyền Voices, Text to Speech, User/Subscription theo chính sách ElevenLabs.
+2. Dán key **trực tiếp vào trang VietFrame của bạn** và bấm **Liên kết tài khoản**. Không đưa key vào chat, GitHub, URL, frontend build hoặc log.
+3. Từ lần đăng nhập VietFrame tiếp theo, server tự dùng key mã hóa đã lưu, bạn có thể chọn **ElevenLabs đã liên kết**, chọn giọng khả dụng và bấm **Lồng tiếng**. Mỗi dự án vẫn chọn giọng theo ý thích; có nút **Ngắt kết nối** trong Cài đặt.
+
+Bảo mật: lưu key Fernet mã hóa trong SQLite; key mã hóa đặt trên volume local (`workspace/.credential-encryption-key`, permission 0600). Trên hosting, đặt `VIETFRAME_CREDENTIAL_ENCRYPTION_KEY` qua secret manager để mã hóa không phụ thuộc đường dẫn volume. Các API ElevenLabs gọi từ server, không trả secret cho trình duyệt.
+
+**Free-First cứng:** trước mỗi lượt tạo âm thanh, server đọc gói và quota từ ElevenLabs. Chỉ chấp nhận tier `free` khi xác minh đủ số ký tự còn lại; không tự tiêu tiền từ tài khoản trả phí. Gói Free có hạn chế giọng qua API, đôi lúc không có voice tương thích: lúc đó báo lỗi, không sinh file giả. Nhiều đoạn chạy nối tiếp vẫn có rủi ro quota bị dùng bởi một thiết bị khác giữa lúc kiểm tra; lỗi được báo. Đây là TTS dựng từ nội dung dịch, **không phải voice cloning/lip sync** của người nói gốc.
+
+Endpoints mới: `PUT /api/projects/{id}/cleanup`, `GET /api/integrations/elevenlabs`, `POST /api/integrations/elevenlabs/link`, `DELETE /api/integrations/elevenlabs`, `GET /api/integrations/elevenlabs/voices`. `POST /api/projects/{id}/dub` nhận thêm `provider: kokoro | elevenlabs`.
+
+Vẫn chạy local-only. Trước khi mở website trên Internet cần kiểm tra HTTPS, reverse proxy và cấu hình session/secret theo môi trường triển khai.

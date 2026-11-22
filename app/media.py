@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from .config import MAX_DURATION_SECONDS
+from .cleanup import filter_chain
 
 
 def installed(binary):
@@ -27,7 +28,7 @@ def probe(file_path: Path) -> dict:
     return {'duration': duration, 'streams': meta.get('streams', [])}
 
 
-def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = None):
+def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = None, regions=None):
     if not installed('ffmpeg'):
         raise RuntimeError('Chưa cài FFmpeg trên máy chủ.')
     # Chdir to the per-project directory, so all filter input names are safe basename literals.
@@ -37,7 +38,14 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
            '-i', source.name]
     if audio:
         cmd += ['-i', audio.name]
-    cmd += ['-vf', f'ass={ass.name}', '-map', '0:v:0']
+    try:
+        meta=probe(source)
+    except (ValueError, RuntimeError) as exc:
+        raise RuntimeError('Không đọc được nguồn video hợp lệ trước khi xuất.') from exc
+    video=next(s for s in meta['streams'] if s.get('codec_type') == 'video')
+    filters=filter_chain(regions or [], int(video['width']), int(video['height']))
+    filters.append(f'ass={ass.name}')
+    cmd += ['-vf', ','.join(filters), '-map', '0:v:0']
     if audio:
         cmd += ['-map', '1:a:0', '-c:a', 'aac', '-af', 'apad', '-shortest']
     else:

@@ -2,7 +2,7 @@
 'use strict';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
-const state = { csrf: '', accountEmail: '', projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source' };
+const state = { csrf: '', accountEmail: '', projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source', cleanupDraft: [], elevenlabsConnected: false };
 const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
 const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating'];
 
@@ -42,7 +42,7 @@ function switchView(view) {
   $(`#view-${view}`).classList.remove('hidden');
   $$('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.view === view));
   text($('#breadcrumb-view'), ({ projects:'Tổng quan', editor:'Biên tập phụ đề', ai:'Tạo video AI', settings:'Hệ thống' })[view]);
-  if (view === 'settings') loadCapabilities();
+  if (view === 'settings') { loadCapabilities(); loadElevenStatus(); }
 }
 function showError(error) { toast(error?.message || 'Có lỗi chưa xác định.', true); }
 function consent() { if (!$('#license-ok').checked) throw new Error('Bạn cần xác nhận quyền sử dụng video.'); }
@@ -141,9 +141,12 @@ function showProject(p) {
   if (p?.id) $('#download-srt').href=`/api/projects/${p.id}/subtitles.srt`;
   const editable=p?.status==='ready';
   ['render-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
-  $('#dub-button').disabled=!editable||!state.capabilities?.tts_kokoro_local;
+  $('#dub-button').disabled=!editable||!$('#dub-voice').value;
+  state.cleanupDraft = p?.cleanup_regions?.map(r=>({...r})) || [];
+  renderCleanupList();
   renderSegments(p?.segments||[]);
   updateCaptionOverlay();
+  updateCleanupOverlay();
 }
 function makeInput(type,value,cls){const input=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')input.type=type;input.className=cls;input.value=value;return input;}
 function addSegment(seg = {start:0,end:2.5,text:''}) {
@@ -192,26 +195,76 @@ async function dubAudio(){
   try {
     if(!state.selected)throw new Error('Chưa chọn dự án.');
     const voice=$('#dub-voice').value;
-    if(!voice)throw new Error('Hãy chọn một giọng tiếng Việt đã cài trên KokoroTTS.');
+    if(!voice)throw new Error('Hãy chọn giọng phù hợp với nhà cung cấp đang kết nối.');
     await saveSegments(false);
-    await apiPost('/api/projects/'+state.selected.id+'/dub',{voice});
+    await apiPost('/api/projects/'+state.selected.id+'/dub',{voice,provider:$('#voice-provider').value});
     toast('Đang tổng hợp lời thoại và căn theo thời gian thật.');await refreshCurrent();
   }catch(e){showError(e);}
 }
 async function loadVoices(){
   const select=$('#dub-voice');select.replaceChildren();
-  const fallback=document.createElement('option');fallback.value='';fallback.textContent='Chưa kết nối KokoroTTS';select.append(fallback);
-  if(!state.capabilities?.tts_kokoro_local){text($('#voice-status'),'Chưa bật server giọng Việt');$('#dub-button').disabled=true;return;}
+  const provider=$('#voice-provider').value;
+  const fallback=document.createElement('option');fallback.value='';fallback.textContent=provider==='kokoro'?'Chưa kết nối KokoroTTS':'Chưa liên kết ElevenLabs';select.append(fallback);
+  $('#dub-button').disabled=true;
+  if(provider==='kokoro' && !state.capabilities?.tts_kokoro_local){text($('#voice-status'),'Chưa bật giọng local');return;}
   try{
-    const result=await request('/api/voices');
+    const result=await request(provider==='kokoro'?'/api/voices':'/api/integrations/elevenlabs/voices');
     let voices=Array.isArray(result)?result:Array.isArray(result?.voices)?result.voices:Array.isArray(result?.data)?result.data:[];
-    const vietnamese=voices.filter(v=>{const name=String(v.name||v.label||'');const lang=String(v.language||v.lang||'');const id=String(v.id||v.voice_id||'');return /vietnam|tiếng việt|\bvi\b|^vi[_-]/i.test(name+' '+lang+' '+id)});
-    voices=vietnamese.length?vietnamese:voices;
+    if(provider==='kokoro'){
+      const vietnamese=voices.filter(v=>{const name=String(v.name||v.label||'');const lang=String(v.language||v.lang||'');const id=String(v.id||v.voice_id||'');return /vietnam|tiếng việt|\bvi\b|^vi[_-]/i.test(name+' '+lang+' '+id)});
+      voices=vietnamese.length?vietnamese:voices;
+    }
     for(const item of voices){const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');if(!val)continue;const o=document.createElement('option');o.value=val;o.textContent=typeof item==='string'?item:(item.name||item.label||val);select.append(o);}
-    if(voices.length){select.removeChild(fallback);text($('#voice-status'),voices.length+' giọng sẵn sàng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
-    else{text($('#voice-status'),'Chưa có danh sách giọng');}
-  }catch(e){text($('#voice-status'),'Lỗi kết nối server giọng Việt');$('#dub-button').disabled=true;}
+    if(voices.length){select.removeChild(fallback);text($('#voice-status'),voices.length+' giọng khả dụng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
+    else{text($('#voice-status'),'Không có giọng khả dụng trên gói API này');}
+  }catch(e){text($('#voice-status'),e.message);$('#dub-button').disabled=true;}
 }
+async function loadElevenStatus(){
+ try{const s=await request('/api/integrations/elevenlabs');state.elevenlabsConnected=s.connected;
+  text($('#elevenlabs-status'),s.connected?'Đã liên kết · '+(s.label||'ElevenLabs')+' (key không được hiển thị)':'Chưa liên kết. Cần API key một lần.');
+  $('#elevenlabs-disconnect').disabled=!s.connected;
+ }catch(e){text($('#elevenlabs-status'),e.message);}
+}
+async function linkEleven(event){
+ event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
+ try{await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';toast('Đã liên kết ElevenLabs an toàn.');await loadElevenStatus();await loadVoices();}
+ catch(e){showError(e);}finally{input.value='';button.disabled=false;}
+}
+async function unlinkEleven(){
+ try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();await loadVoices();}catch(e){showError(e);}
+}
+function updateCleanupOverlay(){
+ const mask=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
+ if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length){mask.style.display='none';return;}
+ const region=state.cleanupDraft[0], videoBox=player.getBoundingClientRect(), screenBox=screen.getBoundingClientRect();
+ const scale=Math.min(videoBox.width/player.videoWidth,videoBox.height/player.videoHeight);
+ const actualW=player.videoWidth*scale,actualH=player.videoHeight*scale;
+ const left=videoBox.left-screenBox.left+(videoBox.width-actualW)/2;
+ const top=videoBox.top-screenBox.top+(videoBox.height-actualH)/2;
+ mask.style.cssText=`display:block;left:${left+region.x*actualW/100}px;top:${top+region.y*actualH/100}px;width:${region.w*actualW/100}px;height:${region.h*actualH/100}px`;
+}
+function renderCleanupList(){
+ const host=$('#cleanup-list');host.replaceChildren();
+ (state.cleanupDraft||[]).forEach((r,i)=>{
+  const row=document.createElement('div');row.className='cleanup-row';
+  const label=document.createElement('span');label.textContent=`Vùng ${i+1}: x ${r.x}%, y ${r.y}%, rộng ${r.w}%, cao ${r.h}%`;
+  const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Xóa';remove.addEventListener('click',()=>{state.cleanupDraft.splice(i,1);renderCleanupList();});
+  row.append(label,remove);host.append(row);
+ });
+}
+function presetCleanup(x,y,w,h){$('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h; const r={x,y,w,h};const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved;}
+function addCleanup(){
+ if(state.cleanupDraft.length>=3)throw new Error('Tối đa 3 vùng che.');
+ const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
+ if(!Object.values(r).every(Number.isInteger)||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi khung video.');
+ state.cleanupDraft.push(r);renderCleanupList();
+}
+async function saveCleanup(){
+ if(!state.selected)throw new Error('Chưa chọn dự án.');
+ const p=await request('/api/projects/'+state.selected.id+'/cleanup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({regions:state.cleanupDraft})});
+ state.selected=p;showProject(p);toast('Đã lưu các vùng che. Bấm Xuất MP4 để tái tạo nền và chèn chữ Việt.');
+}
+
 async function suggestStyle(){
   try {if(!state.selected)throw new Error('Chưa chọn video.');const result=await request('/api/projects/'+state.selected.id+'/reference-style');
     if(result.detected){$('#style-color').value=result.color;updateStylePreview();}
@@ -233,7 +286,7 @@ async function refreshCurrent(){
 }
 function managePolling(){clearInterval(state.polling);if(state.selected&&ongoing.includes(state.selected.status)){state.polling=setInterval(async()=>{await refreshCurrent();await loadProjects();},1800);}}
 async function loadCapabilities(){
-  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
+  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',static_text_cleanup:'Che chữ/logo cố định',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
     const holder=$('#capability-list');holder.replaceChildren();Object.entries(labels).forEach(([key,label])=>{const row=document.createElement('div');row.className='capability';const dot=document.createElement('span');dot.className=data[key]?'yes':'no';dot.textContent=data[key]?'●':'○';const t=document.createElement('b');t.textContent=label;const status=document.createElement('small');status.textContent=data[key]?'Sẵn sàng':'Chưa cài';row.append(dot,t,status);holder.append(row);});
     $('#ai-generate').disabled=!data.ai_video_local;
     await loadVoices();
@@ -298,13 +351,21 @@ function init(){
   $('#translate').addEventListener('click',translate);
   $('#suggest-style').addEventListener('click',suggestStyle);
   $('#dub-button').addEventListener('click',dubAudio);
-  $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style'); }));
+  $('#voice-provider').addEventListener('change',loadVoices);
+  $('#elevenlabs-link-form').addEventListener('submit',linkEleven);
+  $('#elevenlabs-disconnect').addEventListener('click',unlinkEleven);
+  $('#cleanup-subtitle-preset').addEventListener('click',()=>presetCleanup(6,76,88,17));
+  $('#cleanup-logo-preset').addEventListener('click',()=>presetCleanup(77,3,20,12));
+  ['cleanup-x','cleanup-y','cleanup-w','cleanup-h'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r={x:Number($('#cleanup-x').value),y:Number($('#cleanup-y').value),w:Number($('#cleanup-w').value),h:Number($('#cleanup-h').value)}; const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
+  $('#cleanup-add').addEventListener('click',()=>{try{addCleanup();}catch(e){showError(e);}});
+  $('#cleanup-save').addEventListener('click',()=>saveCleanup().catch(showError));
+  $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style');$('#edit-cleanup').classList.toggle('hidden',btn.dataset.editTab!=='cleanup'); }));
   ['style-font','style-size','style-color','style-outline-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
   $('#segments').addEventListener('input',updateCaptionOverlay);
   $('#player').addEventListener('timeupdate',updateCaptionOverlay);
-  $('#player').addEventListener('loadedmetadata',updateCaptionOverlay);
+  $('#player').addEventListener('loadedmetadata',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#player').addEventListener('seeked',updateCaptionOverlay);
-  window.addEventListener('resize',updateCaptionOverlay);
+  window.addEventListener('resize',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
   updateStylePreview();loadProjects();loadCapabilities();

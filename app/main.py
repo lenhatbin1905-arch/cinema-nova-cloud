@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from . import config, db, jobs, engines, auth
+from . import config, db, jobs, engines, auth, elevenlabs_bridge as eleven, cleanup
 from .media import probe
 from .subtitles import verify_segments, make_srt, make_ass
 from .url_guard import classify_url
@@ -21,11 +21,12 @@ from .style_match import sample_reference_style
 async def lifespan(app):
     db.init_db()
     auth.init()
+    eleven.init()
     db.mark_interrupted_jobs()
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.4.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.5.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
@@ -183,7 +184,7 @@ def update_password(request: Request, body: ChangePassword):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','version':'0.4.0','mode':'local-first'}
+    return {'status':'ok','version':'0.5.0','mode':'local-first'}
 
 
 @app.get('/api/capabilities')
@@ -309,6 +310,30 @@ def translate(pid: str,req: TranslateRequest):
     return {'accepted':True,'project_id':pid}
 
 
+class CleanupRect(BaseModel):
+    x: int = Field(ge=0, le=98)
+    y: int = Field(ge=0, le=98)
+    w: int = Field(ge=2, le=100)
+    h: int = Field(ge=2, le=100)
+
+
+class CleanupRequest(BaseModel):
+    regions: list[CleanupRect] = Field(max_length=3)
+
+
+@app.put('/api/projects/{pid}/cleanup')
+def set_cleanup(pid: str, payload: CleanupRequest):
+    p = _find(pid)
+    _ensure_editable(p)
+    try:
+        normalized = cleanup.validate_regions([x.model_dump() for x in payload.regions])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not db.save_cleanup_if_ready(pid, normalized):
+        raise HTTPException(409, 'Dự án đang xử lý.')
+    return _shape(_find(pid))
+
+
 class SubtitleStyle(BaseModel):
     font: str = 'DejaVu Sans'
     font_size: int = Field(default=68,ge=20,le=160)
@@ -334,6 +359,37 @@ def render(pid: str,style: SubtitleStyle):
 
 class DubRequest(BaseModel):
     voice: str = Field(min_length=1,max_length=80,pattern=r'^[a-zA-Z0-9_\-]+$')
+    provider: str = Field(default='kokoro', pattern=r'^(kokoro|elevenlabs)$')
+
+
+@app.get('/api/integrations/elevenlabs')
+def eleven_status():
+    return eleven.is_connected()
+
+
+class ElevenLinkRequest(BaseModel):
+    api_key: str = Field(min_length=16, max_length=256)
+
+
+@app.post('/api/integrations/elevenlabs/link')
+def eleven_link(body: ElevenLinkRequest):
+    try:
+        return eleven.link(body.api_key)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete('/api/integrations/elevenlabs')
+def eleven_disconnect():
+    return eleven.disconnect()
+
+
+@app.get('/api/integrations/elevenlabs/voices')
+def eleven_voices():
+    try:
+        return {'voices': eleven.voices()}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get('/api/voices')
@@ -352,10 +408,17 @@ def dub_video(pid: str,request: DubRequest):
     _ensure_editable(p)
     if not p['segments']:
         raise HTTPException(422,'Cần có phụ đề đã dịch trước khi lồng tiếng.')
-    if not engines.kokoro_is_ready():
+    if request.provider == 'kokoro' and not engines.kokoro_is_ready():
         raise HTTPException(503,'KokoroTTS chưa chạy trên máy cục bộ.')
+    if request.provider == 'elevenlabs':
+        if not eleven.is_connected()['connected']:
+            raise HTTPException(503,'Chưa liên kết ElevenLabs ở Cài đặt.')
+        try:
+            eleven.free_quota_available(sum(len(s['text']) for s in p['segments']))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')
-    jobs.submit(pid,jobs.dubbing,request.voice)
+    jobs.submit(pid,jobs.dubbing,request.voice,request.provider)
     return {'accepted':True,'project_id':pid}
 
 

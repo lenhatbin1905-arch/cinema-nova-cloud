@@ -8,7 +8,7 @@ from pathlib import Path
 from . import config, db
 from .media import probe, ffmpeg_render
 from .subtitles import make_ass, make_srt, verify_segments
-from . import engines
+from . import engines, elevenlabs_bridge as eleven
 
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='vietframe-media')
 logger = logging.getLogger('vietframe.jobs')
@@ -108,7 +108,7 @@ def render(pid, style):
     output=folder/'export.mp4'
     db.update(pid,status='rendering',progress=10,message='FFmpeg đang xuất MP4, vui lòng giữ ứng dụng chạy…')
     dubbed = (folder/data['dub_file']) if data.get('dub_file') else None
-    ffmpeg_render(source,ass,output,audio=dubbed)
+    ffmpeg_render(source,ass,output,audio=dubbed,regions=data.get('cleanup_regions', []))
     probe(output)
     db.update(pid,output_file=output.name,status='ready',progress=100,
               message='Xuất MP4 hoàn tất, có thể xem hoặc tải về.')
@@ -122,22 +122,29 @@ def ai_video(pid,prompt):
     finish_video(pid,output)
 
 
-def dubbing(pid, voice):
+def dubbing(pid, voice, provider='kokoro'):
     project=db.get(pid)
     if not project or not project['video_file'] or not project['segments']:
         raise ValueError('Cần có video và phụ đề đã dịch trước khi lồng tiếng.')
-    if not engines.kokoro_is_ready():
+    if provider == 'kokoro' and not engines.kokoro_is_ready():
         raise RuntimeError('KokoroTTS không phản hồi. Hãy bật máy chủ giọng nói miễn phí cục bộ.')
+    if provider not in {'kokoro', 'elevenlabs'}:
+        raise RuntimeError('Nhà cung cấp giọng không hợp lệ.')
     segments=verify_segments(project['segments'],project['duration'])
     if len(segments)>80:
         raise RuntimeError('Lồng tiếng bản đầu tối đa 80 câu mỗi video.')
+    if provider == 'elevenlabs':
+        eleven.free_quota_available(sum(len(s['text']) for s in segments))
     folder=path_for(pid)
     prepared=[]
-    db.update(pid,status='dubbing',progress=5,message='Đang tạo giọng Việt thật bằng KokoroTTS…')
+    db.update(pid,status='dubbing',progress=5,message='Đang tạo giọng Việt bằng '+provider+'…')
     for index,seg in enumerate(segments):
-        raw=folder/f'voice-{index:03}.wav'
+        raw=folder / (f'voice-{index:03}.wav' if provider == 'kokoro' else f'voice-{index:03}.mp3')
         processed=folder/f'voice-align-{index:03}.wav'
-        engines.kokoro_synthesize(seg['text'],voice,raw)
+        if provider == 'elevenlabs':
+            eleven.synthesize(seg['text'], voice, raw)
+        else:
+            engines.kokoro_synthesize(seg['text'],voice,raw)
         # Each utterance is placed on its own fixed timeline; fail on extreme speed-up
         # instead of cropping the end of a sentence silently.
         from subprocess import run
@@ -172,7 +179,7 @@ def dubbing(pid, voice):
     result=subprocess.run(command,capture_output=True,text=True,timeout=600)
     if result.returncode or not combined.exists():
         raise RuntimeError('Ghép giọng thất bại: '+result.stderr[-300:])
-    for file in list(folder.glob('voice-*.wav'))+list(folder.glob('voice-align-*.wav')):
+    for file in list(folder.glob('voice-*.wav'))+list(folder.glob('voice-align-*.wav'))+list(folder.glob('voice-*.mp3')):
         file.unlink(missing_ok=True)
     db.update(pid,dub_file='dub.wav',output_file=None,status='ready',progress=100,
               message='Đã lồng tiếng cục bộ. Xuất MP4 để ghép giọng với hình.')
