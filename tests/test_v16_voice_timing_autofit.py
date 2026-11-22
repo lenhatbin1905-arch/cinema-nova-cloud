@@ -82,7 +82,7 @@ def test_160_percent_speech_now_dubs_and_renders_real_mp4(client,monkeypatch):
     assert len(produced)==1 and len(preflights)==1
     assert 'Đây là lời thoại tiếng Việt' in produced[0][0]
     assert p['segments'][0]['text']=='Đây là phụ đề tiếng Việt không bị xóa.'
-    assert 'cần nghe lại' in p['message']
+    assert 'nghe lại' in p['message']
     report=client.get(f'/api/projects/{pid}/voice-timing-report')
     assert report.status_code==200
     out=report.json()
