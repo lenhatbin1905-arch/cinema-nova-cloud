@@ -4,7 +4,8 @@ import shutil
 import subprocess
 from pathlib import Path
 from .config import MAX_DURATION_SECONDS
-from .cleanup import filter_chain
+from .cleanup import filter_chain, validate_regions
+from .precision import precision_video
 
 
 def installed(binary):
@@ -34,22 +35,31 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
     # Chdir to the per-project directory, so all filter input names are safe basename literals.
     temporary = output.with_name(output.stem+'.partial'+output.suffix)
     temporary.unlink(missing_ok=True)
+    regions=validate_regions(regions or [])
+    cleaned=source.parent/'precision_noaudio.mp4'
+    cleaned.unlink(missing_ok=True)
+    use_glyph=any(r['method']=='glyph' for r in regions)
+    if use_glyph:
+        precision_video(source,cleaned,regions)
+    video_input=cleaned if use_glyph else source
     cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-           '-i', source.name]
+           '-i', video_input.name]
     if audio:
         cmd += ['-i', audio.name]
+    elif use_glyph:
+        cmd += ['-i',source.name]
     try:
         meta=probe(source)
     except (ValueError, RuntimeError) as exc:
         raise RuntimeError('Không đọc được nguồn video hợp lệ trước khi xuất.') from exc
     video=next(s for s in meta['streams'] if s.get('codec_type') == 'video')
-    filters=filter_chain(regions or [], int(video['width']), int(video['height']))
+    filters=filter_chain(regions, int(video['width']), int(video['height']))
     filters.append(f'ass={ass.name}')
     cmd += ['-vf', ','.join(filters), '-map', '0:v:0']
     if audio:
         cmd += ['-map', '1:a:0', '-c:a', 'aac', '-af', 'apad', '-shortest']
     else:
-        cmd += ['-map', '0:a?', '-c:a', 'aac']
+        cmd += ['-map', '1:a?' if use_glyph else '0:a?', '-c:a', 'aac']
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt','yuv420p',
             '-movflags','+faststart', str(temporary)]
     try:
@@ -61,3 +71,4 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
         return output
     finally:
         temporary.unlink(missing_ok=True)
+        cleaned.unlink(missing_ok=True)
