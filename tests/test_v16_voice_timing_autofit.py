@@ -186,3 +186,38 @@ def test_failed_voice_timing_report_remains_visible_and_editable():
     assert "failedIndex" in js
     assert "field.focus({preventScroll:true})" in js
     assert "Khôi phục để sửa câu thoại dài" in js
+
+
+def test_many_voice_tracks_mix_in_small_memory_bounded_batches(tmp_path,monkeypatch):
+    source=tmp_path/'tiny.wav'
+    proc=subprocess.run(['ffmpeg','-nostdin','-hide_banner','-v','error','-y',
+        '-f','lavfi','-i','sine=frequency=220:duration=0.25',
+        '-ar','24000','-ac','2',str(source)],
+        capture_output=True,text=True,timeout=30)
+    assert proc.returncode==0,proc.stderr
+    real_mixer=jobs._mix_audio_tracks
+    observed=[]
+    def monitor(inputs,output):
+        observed.append(len(inputs))
+        assert 2<=len(inputs)<=jobs.MAX_AUDIO_MIX_INPUTS
+        return real_mixer(inputs,output)
+    monkeypatch.setattr(jobs,'_mix_audio_tracks',monitor)
+    final=tmp_path/'dub.wav'
+    jobs.mix_audio_batched([source]*15,final)
+    assert final.is_file() and final.stat().st_size>1000
+    assert len(observed)>=3
+    assert all(n<=6 for n in observed)
+    assert abs(_duration(final)-0.25)<0.06
+    assert not list(tmp_path.glob('voice-mix-*.wav'))
+    assert not (tmp_path/'dub.partial.wav').exists()
+
+
+def test_renderer_and_open_cv_use_low_memory_thread_limits():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    media=(root/'app/media.py').read_text(encoding='utf-8')
+    precision=(root/'app/precision.py').read_text(encoding='utf-8')
+    assert "'-filter_threads', '1'" in media
+    assert "'-c:v', 'libx264', '-threads', '1'" in media
+    assert 'cv2.setNumThreads(1)' in precision
+    assert "'-c:v','libx264','-threads','1'" in precision
