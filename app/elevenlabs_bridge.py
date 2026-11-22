@@ -60,7 +60,22 @@ def _request(method, path, key, **kwargs):
         with httpx.Client(base_url=API_BASE, timeout=16, trust_env=False, follow_redirects=False) as client:
             response = client.request(method, path, headers={'xi-api-key': key, 'Accept': 'application/json'}, **kwargs)
         if response.status_code in (401, 403):
-            raise ValueError('ElevenLabs từ chối quyền API. Hãy kiểm tra API key và quyền TTS/Voices.')
+            try:
+                body = response.json()
+                detail = body.get('detail', body) if isinstance(body, dict) else {}
+                reason = str(detail.get('message', '')) if isinstance(detail, dict) else ''
+            except (ValueError, TypeError, AttributeError):
+                reason = ''
+            permissions = {
+                'user_read': 'User → Read',
+                'voices_read': 'Voices → Read',
+                'text_to_speech': 'Text to Speech → Access',
+            }
+            missing = [label for scope, label in permissions.items() if scope in reason.lower()]
+            if missing:
+                raise ValueError('API key ElevenLabs thiếu quyền: ' + ', '.join(missing) +
+                                 '. Mở ElevenLabs → API Keys → Edit key, bật quyền này rồi liên kết lại.')
+            raise ValueError('ElevenLabs từ chối API key (401/403). Kiểm tra key, giới hạn IP và các quyền User Read, Voices Read, Text to Speech.')
         if response.status_code == 429:
             raise ValueError('ElevenLabs đã giới hạn lượt sử dụng hoặc hết hạn mức miễn phí.')
         if response.status_code >= 400:
