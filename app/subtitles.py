@@ -64,7 +64,66 @@ def make_srt(segments: list) -> str:
     return '\n'.join(f'{i}\n{time_srt(s["start"])} --> {time_srt(s["end"])}\n{s["text"]}\n' for i,s in enumerate(segments, 1))
 
 
-def make_ass(segments: list, style: dict, resolution=(1080,1920)) -> str:
+def replacement_region_for_cue(cue, regions):
+    """Select an explicitly tagged subtitle-cleanup region for this cue.
+
+    Region selection is by actual time overlap; logos and legacy cleanup masks
+    are never assumed to be replacement subtitle anchors.
+    """
+    candidates = []
+    for region in regions or []:
+        if region.get('purpose') != 'subtitle':
+            continue
+        start = float(region.get('start', cue['start']))
+        end = float(region.get('end', cue['end']))
+        overlap = max(0.0, min(cue['end'], end) - max(cue['start'], start))
+        if overlap > 0:
+            candidates.append((overlap, region))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def anchor_at_cleanup_region(region, resolution):
+    """ASS centered position for the exact original-caption cleanup rectangle."""
+    width, height = resolution
+    cx = round(width * (region['x'] + region['w'] / 2) / 100)
+    cy = round(height * (region['y'] + region['h'] / 2) / 100)
+    return r'{\an5\pos(' + str(cx) + ',' + str(cy) + ')}'
+
+
+def word_pop_chunks(text, start, end):
+    """Fit *all* Vietnamese text into a cue as sequential short bursts.
+
+    This replicates the general single-word/short-burst rhythm (not an exact
+    timing transcription). Cue-level transcripts don't contain word timestamps.
+    """
+    words = text.replace('\n', ' ').split()
+    if not words:
+        return []
+    duration = end - start
+    # Longer cues favor 1 word at a time; very dense captions use short groups.
+    target = max(1, min(len(words), int(duration / 0.32 + 0.5)))
+    groups = []
+    for i in range(target):
+        lo = round(i * len(words) / target)
+        hi = round((i + 1) * len(words) / target)
+        if hi > lo:
+            groups.append(' '.join(words[lo:hi]))
+    if not groups:
+        groups = [' '.join(words)]
+    weights = [max(1, len(g.replace(' ', ''))) ** 0.45 for g in groups]
+    total = sum(weights)
+    elapsed = 0.0
+    result = []
+    for i, group in enumerate(groups):
+        next_elapsed = elapsed + weights[i] / total * duration
+        item_start = start + elapsed
+        item_end = end if i == len(groups)-1 else start + next_elapsed
+        result.append((item_start, item_end, group))
+        elapsed = next_elapsed
+    return result
+
+
+def make_ass(segments: list, style: dict, resolution=(1080,1920), cleanup_regions=None) -> str:
     font = style.get('font', 'DejaVu Sans')
     if not FONT.fullmatch(font):
         raise ValueError('Tên font không hợp lệ.')
@@ -93,13 +152,31 @@ Style: Main,{font},{fontsize},{color},&H000000FF,{outline_color},&H7F000000,{bol
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 '''
+    caption_mode = style.get('caption_mode', 'full')
+    if caption_mode not in ('full', 'word_pop'):
+        raise ValueError('Hiệu ứng phụ đề không hợp lệ.')
     rows = []
     for s in segments:
-        # Escape ASS override syntax, so foreign subtitles cannot inject styling commands.
-        safe = s['text'].replace('\\', '＼').replace('{','｛').replace('}','｝')
-        safe = safe.replace('\r',' ').replace('\n','\\N')
-        # [[từ nhấn]] uses only safe ASS foreground color tags. Other user braces remain escaped.
-        safe = re.sub(r'\[\[([^\[\]\n]{1,80})\]\]',
-                      lambda m: '{\\1c' + highlight_color + '}' + m.group(1) + '{\\1c' + color + '}', safe)
-        rows.append(f'Dialogue: 0,{time_ass(s["start"])},{time_ass(s["end"])},Main,,0,0,0,,{safe}')
+        region = replacement_region_for_cue(s, cleanup_regions)
+        position = anchor_at_cleanup_region(region, resolution) if region else ''
+        captions = (word_pop_chunks(s['text'], s['start'], s['end'])
+                    if caption_mode == 'word_pop' else
+                    [(s['start'], s['end'], s['text'])])
+        for event_start, event_end, label in captions:
+            # Escape ASS override syntax; user dialogue cannot inject styling.
+            safe = label.replace('\\', '＼').replace('{','｛').replace('}','｝')
+            safe = safe.replace('\r',' ').replace('\n','\\N')
+            safe = re.sub(r'\[\[([^\[\]\n]{1,80})\]\]',
+                          lambda m: '{\\1c' + highlight_color + '}' + m.group(1) +
+                                    '{\\1c' + color + '}', safe)
+            animation = ''
+            if caption_mode == 'word_pop':
+                # Gentle word pop with bounded fades (times in milliseconds).
+                life = max(40, round((event_end-event_start)*1000))
+                fade = min(65, life//6)
+                animation = (r'{\fad(' + str(fade) + ',' + str(fade) + ')'
+                             + r'\t(0,' + str(min(life,110)) + r',\fscx108\fscy108)'
+                             + r'\t(' + str(min(life,110)) + ',' + str(min(life,220))
+                             + r',\fscx100\fscy100)}')
+            rows.append(f'Dialogue: 0,{time_ass(event_start)},{time_ass(event_end)},Main,,0,0,0,,{position}{animation}{safe}')
     return header + '\n'.join(rows) + '\n'
