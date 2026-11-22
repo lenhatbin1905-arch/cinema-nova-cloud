@@ -54,10 +54,18 @@ def import_url(pid, url):
                 merge_output_format='mp4',noplaylist=True,playlistend=1,quiet=True,
                 no_warnings=True,max_filesize=config.MAX_UPLOAD_MB*1024*1024,
                 progress_hooks=[hook])
-    with yt_dlp.YoutubeDL(opts) as yd:
-        info = yd.extract_info(url, download=True)
-        if not info:
-            raise RuntimeError('Không tải được. Video có thể riêng tư hoặc nền tảng yêu cầu đăng nhập.')
+    if shutil.which('node'):
+        opts['js_runtimes'] = {'node': {}}
+    try:
+        with yt_dlp.YoutubeDL(opts) as yd:
+            info = yd.extract_info(url, download=True)
+    except yt_dlp.utils.DownloadError as exc:
+        reason = str(exc).casefold()
+        if 'failed to extract any player response' in reason:
+            raise RuntimeError('YouTube không cung cấp luồng phát cho máy chủ Render. Hãy thử video công khai khác hoặc tải trực tiếp tệp video bạn có quyền sử dụng. Không cần thay API Gemini/ElevenLabs.') from exc
+        raise RuntimeError('Không thể tải video từ nền tảng này. Nếu nội dung yêu cầu tài khoản, vùng địa lý hay quyền riêng tư, hãy tải lên tệp video bạn có quyền sử dụng.') from exc
+    if not info:
+        raise RuntimeError('Không tải được. Video có thể riêng tư hoặc nền tảng yêu cầu đăng nhập.')
     videos = sorted((p for p in folder.glob('source.*') if p.suffix.lower() in {'.mp4','.webm','.mov','.mkv'}),
                     key=lambda p: p.stat().st_mtime, reverse=True)
     if not videos:
