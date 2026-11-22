@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from . import config, db, jobs, engines, auth, elevenlabs_bridge as eleven, gemini_bridge as gemini, cleanup
+from . import config, db, jobs, engines, auth, elevenlabs_bridge as eleven, gemini_bridge as gemini, google_oauth as google, cleanup
 from .media import probe
 from .subtitles import verify_segments, make_srt, make_ass
 from .url_guard import classify_url
@@ -21,13 +21,14 @@ from .style_match import sample_reference_style
 async def lifespan(app):
     db.init_db()
     auth.init()
+    google.init()
     eleven.init()
     gemini.init()
     db.mark_interrupted_jobs()
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.8.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.9.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
@@ -35,7 +36,7 @@ app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),nam
 async def security_and_auth(request: Request, call_next):
     path = request.url.path
     method = request.method.upper()
-    public = {'/login', '/api/health', '/api/auth/config', '/api/auth/setup', '/api/auth/login'}
+    public = {'/login', '/api/health', '/api/auth/config', '/api/auth/setup', '/api/auth/login', '/api/auth/google/start', '/api/auth/google/callback'}
     protected = not (path in public or (path.startswith('/static/') and path != '/static/index.html'))
     session = auth.get_session(request.cookies.get(auth.COOKIE_NAME)) if protected else None
     request.state.auth_session = session
@@ -124,7 +125,8 @@ def login_page(request: Request):
 def auth_config(request: Request):
     return {'setup_required': not auth.has_owner(),
             'local_setup_allowed': not config.SETUP_TOKEN and _setup_authorized(request, ''),
-            'setup_token_required': bool(config.SETUP_TOKEN)}
+            'setup_token_required': bool(config.SETUP_TOKEN),
+            'google_login_available': google.settings()['enabled']}
 
 
 @app.post('/api/auth/setup', status_code=201)
@@ -140,6 +142,52 @@ def setup(request: Request, credentials: OwnerSetup):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return _start_login(JSONResponse({}, status_code=201), request, user)
+
+
+@app.get('/api/auth/google/start')
+def google_login_start(request: Request):
+    if not google.settings()['enabled']:
+        return RedirectResponse('/login?google_error=not_configured', status_code=303)
+    try:
+        authorization_url, state = google.start()
+    except (ValueError, OSError):
+        return RedirectResponse('/login?google_error=unavailable', status_code=303)
+    response = RedirectResponse(authorization_url, status_code=303)
+    response.set_cookie(google.STATE_COOKIE, state, httponly=True,
+                        secure=_cookie_secure(request), samesite='lax',
+                        max_age=google.STATE_TTL, path='/api/auth/google')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.get('/api/auth/google/callback')
+def google_login_callback(request: Request, code: str = '', state: str = '', error: str = ''):
+    # The OAuth state was bound to the user's browser with an HttpOnly cookie.
+    # Expire it on every outcome; the SQLite state is consumed exactly once.
+    status = 'invalid_state'
+    user = None
+    if not error:
+        try:
+            verifier, nonce = google.consume(state, request.cookies.get(google.STATE_COOKIE, ''))
+            user = google.exchange(code, verifier, nonce)
+        except PermissionError:
+            status = 'rejected'
+        except (ValueError, OSError, RuntimeError):
+            status = 'unavailable'
+    else:
+        status = 'cancelled'
+    if user:
+        token, _csrf = auth.new_session(user['id'])
+        response = RedirectResponse('/', status_code=303)
+        response.set_cookie(auth.COOKIE_NAME, token, httponly=True,
+                            secure=_cookie_secure(request), samesite='lax',
+                            max_age=auth.SESSION_TTL, path='/')
+    else:
+        response = RedirectResponse('/login?google_error=' + status, status_code=303)
+    response.delete_cookie(google.STATE_COOKIE, path='/api/auth/google',
+                           secure=_cookie_secure(request), httponly=True, samesite='lax')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.post('/api/auth/login')
@@ -185,7 +233,7 @@ def update_password(request: Request, body: ChangePassword):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','version':'0.8.0','mode':'local-first'}
+    return {'status':'ok','version':'0.9.0','mode':'local-first'}
 
 
 @app.get('/api/capabilities')
