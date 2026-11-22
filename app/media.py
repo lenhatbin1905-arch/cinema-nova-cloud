@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from .config import MAX_DURATION_SECONDS
 from .cleanup import filter_chain, validate_regions
-from .precision import precision_video
+from .precision import precision_video, limited_video_dimensions
 
 
 def installed(binary):
@@ -57,7 +57,14 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
     # from the processed video, not the original source resolution.
     actual=probe(video_input) if use_glyph else meta
     video=next(s for s in actual['streams'] if s.get('codec_type') == 'video')
-    filters=filter_chain(regions, int(video['width']), int(video['height']))
+    video_width,video_height=int(video['width']),int(video['height'])
+    filters=filter_chain(regions, video_width, video_height)
+    # Stay below 512MiB on the free host; use an even-dimension,
+    # aspect-preserving 720p/1280px-long-edge export for large sources.
+    max_edge=int(os.getenv('VIETFRAME_MAX_VIDEO_EDGE','1280'))
+    out_width,out_height=limited_video_dimensions(video_width,video_height,max_edge)
+    if (out_width,out_height)!=(video_width,video_height):
+        filters.append(f'scale={out_width}:{out_height}:flags=lanczos')
     filters.append(f'ass={ass.name}')
     cmd += ['-vf', ','.join(filters), '-map', '0:v:0']
     if audio:
