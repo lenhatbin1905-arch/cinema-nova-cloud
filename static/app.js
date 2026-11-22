@@ -115,7 +115,14 @@ function updateCaptionOverlay(){
   overlay.style.color=style.color;
   overlay.style.webkitTextStroke=Math.min(7,style.outline*scale)+'px '+style.outline_color;
   overlay.style.paintOrder='stroke fill';
-  overlay.textContent=active.text;
+  overlay.replaceChildren();
+  const parts=String(active.text).split(/(\[\[[^\[\]\n]{1,80}\]\])/g);
+  for(const part of parts){
+    if(part.startsWith('[[')&&part.endsWith(']]')){
+      const highlight=document.createElement('span');highlight.style.color=style.highlight_color;
+      highlight.textContent=part.slice(2,-2);overlay.append(highlight);
+    }else overlay.append(document.createTextNode(part));
+  }
 }
 
 function showProject(p) {
@@ -174,7 +181,7 @@ async function saveSegments(showToast=true){
   state.selected=saved;
   if(showToast)toast('Đã lưu nội dung phụ đề thật.');return saved;
 }
-function currentStyle(){return {font:$('#style-font').value,font_size:Number($('#style-size').value),color:$('#style-color').value,outline_color:$('#style-outline-color').value,outline:Number($('#style-outline').value),margin_v:Number($('#style-margin').value),bold:$('#style-bold').checked};}
+function currentStyle(){return {font:$('#style-font').value,font_size:Number($('#style-size').value),color:$('#style-color').value,outline_color:$('#style-outline-color').value,outline:Number($('#style-outline').value),margin_v:Number($('#style-margin').value),highlight_color:$('#style-highlight-color').value,bold:$('#style-bold').checked};}
 async function renderVideo(){
   try{if(!state.selected)throw new Error('Chưa chọn video.');await saveSegments(false);
     const result=await apiPost('/api/projects/'+state.selected.id+'/render',currentStyle());
@@ -233,36 +240,65 @@ async function linkEleven(event){
 async function unlinkEleven(){
  try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();$('#voice-provider').value='kokoro';await loadVoices();}catch(e){showError(e);}
 }
+function readCleanupDraft(){
+ const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
+ return {...r,start:Number($('#cleanup-start').value),end:Number($('#cleanup-end').value),method:$('#cleanup-method').value};
+}
+function validateCleanupDraft(r){
+ if(!['glyph','edge'].includes(r.method))throw new Error('Phương pháp không hợp lệ.');
+ if(!['x','y','w','h'].every(k=>Number.isInteger(r[k])))throw new Error('Tọa độ cần là số nguyên.');
+ if(r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi video.');
+ if(r.h>12||r.w*r.h>900)throw new Error('Chỉ chọn sát từng dòng chữ; không được che thành dải ngang.');
+ if(!Number.isFinite(r.start)||!Number.isFinite(r.end)||r.start<0||r.end<=r.start||r.end>1800)throw new Error('Chọn thời gian hợp lệ.');
+}
 function updateCleanupOverlay(){
- const mask=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
- if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length){mask.style.display='none';return;}
- const region=state.cleanupDraft[0], videoBox=player.getBoundingClientRect(), screenBox=screen.getBoundingClientRect();
- const scale=Math.min(videoBox.width/player.videoWidth,videoBox.height/player.videoHeight);
+ const holder=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
+ holder.replaceChildren();
+ if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length)return;
+ const box=player.getBoundingClientRect(),screenBox=screen.getBoundingClientRect();
+ const scale=Math.min(box.width/player.videoWidth,box.height/player.videoHeight);
  const actualW=player.videoWidth*scale,actualH=player.videoHeight*scale;
- const left=videoBox.left-screenBox.left+(videoBox.width-actualW)/2;
- const top=videoBox.top-screenBox.top+(videoBox.height-actualH)/2;
- mask.style.cssText=`display:block;left:${left+region.x*actualW/100}px;top:${top+region.y*actualH/100}px;width:${region.w*actualW/100}px;height:${region.h*actualH/100}px`;
+ const left=box.left-screenBox.left+(box.width-actualW)/2;
+ const top=box.top-screenBox.top+(box.height-actualH)/2;
+ for(const r of state.cleanupDraft){
+  if(r.start!=null && !(r.start<=player.currentTime&&player.currentTime<r.end))continue;
+  const rect=document.createElement('div');rect.className='cleanup-region';
+  rect.style.cssText='left:'+(left+r.x*actualW/100)+'px;top:'+(top+r.y*actualH/100)+'px;width:'+(r.w*actualW/100)+'px;height:'+(r.h*actualH/100)+'px';
+  holder.append(rect);
+ }
 }
 function renderCleanupList(){
  const host=$('#cleanup-list');host.replaceChildren();
  (state.cleanupDraft||[]).forEach((r,i)=>{
   const row=document.createElement('div');row.className='cleanup-row';
-  const label=document.createElement('span');label.textContent=`Vùng ${i+1}: x ${r.x}%, y ${r.y}%, rộng ${r.w}%, cao ${r.h}%`;
-  const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Xóa';remove.addEventListener('click',()=>{state.cleanupDraft.splice(i,1);renderCleanupList();});
+  const label=document.createElement('span');
+  label.textContent=(i+1)+'. '+(r.method==='edge'?'Nội suy':'Nét chữ')+' · '+r.x+','+r.y+' · '+r.w+'×'+r.h+'% · '+(r.start??'0')+'–'+(r.end??'hết')+'s';
+  const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Xóa';
+  remove.addEventListener('click',()=>{state.cleanupDraft.splice(i,1);renderCleanupList();updateCleanupOverlay();});
   row.append(label,remove);host.append(row);
  });
 }
-function presetCleanup(x,y,w,h){$('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h; const r={x,y,w,h};const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved;}
+function presetCleanup(x,y,w,h){
+ $('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h;
+ const candidate=readCleanupDraft();
+ const saved=state.cleanupDraft;state.cleanupDraft=[candidate];updateCleanupOverlay();state.cleanupDraft=saved;
+}
+function useCurrentCaptionTime(){
+ const player=$('#player'),at=player.currentTime;
+ const cue=collectSegments().find(s=>s.start<=at&&s.end>at);
+ if(!cue)throw new Error('Đưa video tới một câu phụ đề rồi chọn lại.');
+ $('#cleanup-start').value=cue.start.toFixed(2);$('#cleanup-end').value=cue.end.toFixed(2);
+ toast('Đã đặt thời gian xuất hiện của câu phụ đề hiện tại.');
+}
 function addCleanup(){
- if(state.cleanupDraft.length>=3)throw new Error('Tối đa 3 vùng che.');
- const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
- if(!Object.values(r).every(Number.isInteger)||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi khung video.');
- state.cleanupDraft.push(r);renderCleanupList();
+ if(state.cleanupDraft.length>=80)throw new Error('Tối đa 80 vùng chữ.');
+ const r=readCleanupDraft();validateCleanupDraft(r);
+ state.cleanupDraft.push(r);renderCleanupList();updateCleanupOverlay();
 }
 async function saveCleanup(){
  if(!state.selected)throw new Error('Chưa chọn dự án.');
  const p=await request('/api/projects/'+state.selected.id+'/cleanup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({regions:state.cleanupDraft})});
- state.selected=p;showProject(p);toast('Đã lưu các vùng che. Bấm Xuất MP4 để tái tạo nền và chèn chữ Việt.');
+ state.selected=p;showProject(p);toast('Đã lưu vùng xóa chữ theo thời gian. Xuất MP4 rồi kiểm tra trước/sau.');
 }
 
 async function suggestStyle(){
@@ -286,7 +322,7 @@ async function refreshCurrent(){
 }
 function managePolling(){clearInterval(state.polling);if(state.selected&&ongoing.includes(state.selected.status)){state.polling=setInterval(async()=>{await refreshCurrent();await loadProjects();},1800);}}
 async function loadCapabilities(){
-  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',static_text_cleanup:'Che chữ/logo cố định',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
+  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',static_text_cleanup:'Xóa theo nét chữ và thời gian',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
     const holder=$('#capability-list');holder.replaceChildren();Object.entries(labels).forEach(([key,label])=>{const row=document.createElement('div');row.className='capability';const dot=document.createElement('span');dot.className=data[key]?'yes':'no';dot.textContent=data[key]?'●':'○';const t=document.createElement('b');t.textContent=label;const status=document.createElement('small');status.textContent=data[key]?'Sẵn sàng':'Chưa cài';row.append(dot,t,status);holder.append(row);});
     $('#ai-generate').disabled=!data.ai_video_local;
     await loadVoices();
@@ -354,17 +390,19 @@ function init(){
   $('#voice-provider').addEventListener('change',loadVoices);
   $('#elevenlabs-link-form').addEventListener('submit',linkEleven);
   $('#elevenlabs-disconnect').addEventListener('click',unlinkEleven);
-  $('#cleanup-subtitle-preset').addEventListener('click',()=>presetCleanup(6,76,88,17));
-  $('#cleanup-logo-preset').addEventListener('click',()=>presetCleanup(77,3,20,12));
-  ['cleanup-x','cleanup-y','cleanup-w','cleanup-h'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r={x:Number($('#cleanup-x').value),y:Number($('#cleanup-y').value),w:Number($('#cleanup-w').value),h:Number($('#cleanup-h').value)}; const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
+  $('#style-original-preset').addEventListener('click',()=>{ $('#style-font').value='DejaVu Sans';$('#style-size').value=32;$('#style-color').value='#ffffff';$('#style-outline-color').value='#101010';$('#style-outline').value=3;$('#style-highlight-color').value='#FFD42A';$('#style-margin').value=160;$('#style-bold').checked=true;updateStylePreview();toast('Mẫu gần giống chữ trắng viền đen, nhấn vàng. Không phải font gốc đã xác minh.'); });
+  $('#cleanup-subtitle-preset').addEventListener('click',()=>presetCleanup(10,76,80,8));
+  $('#cleanup-logo-preset').addEventListener('click',()=>presetCleanup(80,3,16,7));
+  ['cleanup-x','cleanup-y','cleanup-w','cleanup-h','cleanup-start','cleanup-end','cleanup-method'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r=readCleanupDraft(); const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
+  $('#cleanup-use-cue').addEventListener('click',()=>{try{useCurrentCaptionTime();}catch(e){showError(e);}});
   $('#cleanup-add').addEventListener('click',()=>{try{addCleanup();}catch(e){showError(e);}});
   $('#cleanup-save').addEventListener('click',()=>saveCleanup().catch(showError));
   $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style');$('#edit-cleanup').classList.toggle('hidden',btn.dataset.editTab!=='cleanup'); }));
-  ['style-font','style-size','style-color','style-outline-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
+  ['style-font','style-size','style-color','style-outline-color','style-highlight-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
   $('#segments').addEventListener('input',updateCaptionOverlay);
-  $('#player').addEventListener('timeupdate',updateCaptionOverlay);
+  $('#player').addEventListener('timeupdate',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#player').addEventListener('loadedmetadata',()=>{updateCaptionOverlay();updateCleanupOverlay();});
-  $('#player').addEventListener('seeked',updateCaptionOverlay);
+  $('#player').addEventListener('seeked',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   window.addEventListener('resize',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
