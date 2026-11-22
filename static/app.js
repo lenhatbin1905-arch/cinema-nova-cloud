@@ -547,14 +547,28 @@ async function unlinkEleven(){
  try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();$('#voice-provider').value='kokoro';await loadVoices();}catch(e){showError(e);}
 }
 function updateCleanupOverlay(){
- const mask=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
- if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length){mask.style.display='none';return;}
- const region=state.cleanupDraft[0], videoBox=player.getBoundingClientRect(), screenBox=screen.getBoundingClientRect();
+ const host=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
+ host.replaceChildren();
+ if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length){
+   host.style.display='none';return;
+ }
+ const videoBox=player.getBoundingClientRect(),screenBox=screen.getBoundingClientRect();
  const scale=Math.min(videoBox.width/player.videoWidth,videoBox.height/player.videoHeight);
  const actualW=player.videoWidth*scale,actualH=player.videoHeight*scale;
  const left=videoBox.left-screenBox.left+(videoBox.width-actualW)/2;
  const top=videoBox.top-screenBox.top+(videoBox.height-actualH)/2;
- mask.style.cssText=`display:block;left:${left+region.x*actualW/100}px;top:${top+region.y*actualH/100}px;width:${region.w*actualW/100}px;height:${region.h*actualH/100}px`;
+ const visible=state.cleanupDraft.filter(r=>(r.start==null||r.start<=player.currentTime)
+      &&(r.end==null||r.end>player.currentTime));
+ if(!visible.length){host.style.display='none';return;}
+ host.style.cssText='display:block;position:absolute;inset:0;background:transparent;pointer-events:none;';
+ visible.forEach(r=>{
+   const guide=document.createElement('div');
+   guide.className='cleanup-region';
+   guide.style.cssText='left:'+(left+r.x*actualW/100)+'px;top:'+(top+r.y*actualH/100)+
+     'px;width:'+(r.w*actualW/100)+'px;height:'+(r.h*actualH/100)+'px';
+   guide.title=r.purpose==='subtitle'?'Xóa chữ gốc, thay bằng chữ Việt tại vị trí này':'Vùng chỉ xóa';
+   host.append(guide);
+ });
 }
 function renderCleanupList(){
  const host=$('#cleanup-list');host.replaceChildren();
