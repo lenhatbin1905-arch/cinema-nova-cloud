@@ -1,0 +1,28 @@
+# Free-first test deployment ONLY; Render Free has ephemeral storage.
+services:
+  - type: web
+    name: vietframe-studio-pro
+    runtime: docker
+    plan: free
+    region: singapore
+    repo: https://github.com/lenhatbin1905-arch/cinema-nova-cloud
+    branch: feature/vietframe-studio-free-first-v02
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: off
+    healthCheckPath: /api/health
+    envVars:
+      - key: VIETFRAME_SETUP_TOKEN
+        sync: false
+      - key: VIETFRAME_COOKIE_SECURE
+        value: 'true'
+      - key: VIETFRAME_DATA
+        value: /tmp/vietframe
+      - key: MAX_UPLOAD_MB
+        value: '60'
+      - key: MAX_DURATION_SECONDS
+        value: '180'
+      - key: ENABLE_LOCAL_VIDEO_GEN
+        value: 'false'
+      - key: PYTHONUNBUFFERED
+        value: '1'
