@@ -588,7 +588,7 @@ function addCleanup(){
  const first=Number($('#cleanup-start').value), last=Number($('#cleanup-end').value);
  if(!Number.isFinite(first)||!Number.isFinite(last)||first<0||last<=first)throw new Error('Thời gian vùng che không hợp lệ.');
  r.start=first;r.end=last;
- if(!Object.values(r).every(Number.isInteger)||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi khung video.');
+ if(!['x','y','w','h'].every(k=>Number.isInteger(r[k]))||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100||r.w*r.h>900||r.h>12)throw new Error('Vùng che vượt khỏi khung video.');
  state.cleanupDraft.push(r);renderCleanupList();updateCaptionOverlay();updateCleanupOverlay();
 }
 async function saveCleanup(){
