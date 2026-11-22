@@ -9,15 +9,20 @@ from .cleanup import inpaint_frame,validate_regions
 def precision_video(source:Path,destination:Path,regions):
     glyph=[r for r in validate_regions(regions) if r['method']=='glyph']
     if not glyph:return None
+    # Constrain OpenCV worker pools on 512 MiB Render Free instances.
+    cv2.setNumThreads(1)
     cap=cv2.VideoCapture(str(source))
     if not cap.isOpened():raise ValueError('Không thể mở video gốc để làm sạch từng nét chữ.')
+    if hasattr(cv2, 'CAP_PROP_BUFFERSIZE'):
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     w,h=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps=float(cap.get(cv2.CAP_PROP_FPS))
     if w<8 or h<8 or not (0<fps<=120):
         cap.release();raise ValueError('Video có thông số hình ảnh không hợp lệ.')
-    command=['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y','-f','rawvideo',
+    command=['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
+             '-threads','1','-filter_threads','1','-f','rawvideo',
              '-pix_fmt','bgr24','-s',f'{w}x{h}','-r',str(fps),'-i','pipe:0',
-             '-an','-c:v','libx264','-preset','veryfast','-crf','18','-pix_fmt','yuv420p',
+             '-an','-c:v','libx264','-threads','1','-preset','veryfast','-crf','18','-pix_fmt','yuv420p',
              '-movflags','+faststart',str(destination)]
     proc=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     frames=0;count=0;skipped=0
