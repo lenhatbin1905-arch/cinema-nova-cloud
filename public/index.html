@@ -1,112 +1,14 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#F5F4F0">
-<meta name="description" content="VietFrame Studio – studio phụ đề và biên tập video với phong cách tinh gọn. Bản xem trước miễn phí.">
-<title>VietFrame Studio — Video workspace</title>
-<style>
-:root{--ink:#1b2228;--muted:#657078;--paper:#f5f4f0;--card:#fff;--line:#e3e6e7;--accent:#2e5c54;--accent-soft:#e4eee8;--gold:#f5cb3f}
-*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;line-height:1.48;font-size:14px}button,input,textarea,select{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #96b3a8;outline-offset:2px}.page{max-width:1360px;margin:auto;padding:0 26px}
-.top{background:#fff;border-bottom:1px solid var(--line)}.top-inner{min-height:70px;display:flex;align-items:center;gap:18px}.logo{display:flex;align-items:center;gap:12px;font-weight:750;font-size:17px;letter-spacing:-.6px}.brand-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:var(--ink);color:white;font-size:20px;font-weight:800}.meta{font-size:11px;font-weight:600;border:1px solid #d4e3da;background:#ecf4ed;color:#3d6756;padding:5px 9px;border-radius:20px}.nav{display:flex;align-items:center;gap:25px;margin-left:auto;font-size:13px;color:#455159}.nav a:hover{color:#1c5248}.nav .outline{border:1px solid var(--line);padding:9px 15px;border-radius:7px;background:#fff}
-.head{padding:39px 0 26px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px}.eyebrow{color:#477369;text-transform:uppercase;font-size:11px;font-weight:800;letter-spacing:1.8px}.head h1{font-size:clamp(27px,3.2vw,41px);line-height:1.14;letter-spacing:-1.9px;margin:10px 0}.lead{margin:0;color:var(--muted);max-width:650px}.head-tag{border:1px solid #dbe1dc;background:#fff;border-radius:8px;padding:11px 14px;color:#657078;white-space:nowrap;font-size:12px}.head-tag strong{color:#2c554a}
-.workspace{display:grid;grid-template-columns:250px minmax(0,1fr) 290px;min-height:550px;background:var(--card);border:1px solid #dfe3e5;border-radius:12px;box-shadow:0 16px 44px rgba(31,44,46,.045);overflow:hidden}.left{padding:22px 16px;border-right:1px solid var(--line);background:#fafafa}.side-h{font-size:11px;color:#858c91;letter-spacing:1.2px;font-weight:750;margin:5px 10px 17px}.side-item{display:flex;align-items:center;gap:12px;color:#657178;padding:11px 12px;border-radius:8px;margin-bottom:4px;font-weight:550}.side-item.active{background:#e8f0eb;color:#224d42;font-weight:750}.glyph{font-size:17px;width:21px;text-align:center}.side-section{margin-top:29px}.side-foot{margin:27px 10px 0;padding-top:18px;border-top:1px solid var(--line);font-size:11px;color:#69777c;line-height:1.7}
-.main{padding:20px 24px 25px;min-width:0}.section-top{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-bottom:16px}.section-top h2{font-size:16px;letter-spacing:-.4px;margin:0}.section-top small{color:#899399;font-size:11px}.preview-area{border-radius:9px;min-height:368px;background:#1c2529;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;isolation:isolate}.video-stage{height:340px;aspect-ratio:9/16;max-width:90%;position:relative;display:flex;align-items:center;justify-content:center;background:linear-gradient(155deg,#3a4d4b,#202d32 50%,#132026);overflow:hidden;border:1px solid #576365}.video-stage:before{content:"";position:absolute;width:180%;height:1px;background:#ffffff15;top:70%;transform:rotate(-22deg)}.video-stage video{width:100%;height:100%;object-fit:contain;display:none;background:black}.placeholder{color:#aebec0;text-align:center;padding:15px;font-size:12px}.placeholder span{display:block;font-size:39px;margin-bottom:10px;color:#d2dfdb}.subtitle{position:absolute;bottom:12%;left:4%;width:92%;text-align:center;color:white;font-size:clamp(15px,2vw,21px);font-weight:900;text-shadow:2px 2px 0 #111,-2px 2px 0 #111,2px -2px 0 #111,-2px -2px 0 #111,0 3px 6px #111;pointer-events:none;line-height:1.3;overflow-wrap:anywhere}.subtitle mark{background:none;color:var(--gold)}.video-stage[data-style="clean"] .subtitle{font-weight:700;text-shadow:0 2px 6px #000,0 0 1px #000}.video-stage[data-style="cinema"] .subtitle{font-weight:850;text-shadow:0 1px 0 #000,0 2px 7px #000,0 0 2px #000;letter-spacing:.2px}.play-controls{display:flex;align-items:center;gap:13px;padding:13px 0 10px;color:#727f86;font-size:11px;border-bottom:1px solid var(--line)}.dot{width:7px;height:7px;border-radius:50%;background:#91aa9f}.play-controls strong{color:var(--ink);font-weight:650}.info{text-align:right;margin-left:auto}.drag{display:flex;align-items:center;justify-content:center;gap:11px;min-height:68px;padding:13px;border:1px dashed #c7d0d0;border-radius:8px;background:#fafbf9;text-align:center;color:#54666b;font-size:12px;margin-top:16px;cursor:pointer}.drag strong{color:#244f45}.drag.dragover{border-color:#477469;background:#eef7f1}.drag input{display:none}
-.right{padding:20px;border-left:1px solid var(--line)}.panel-h{font-weight:780;margin:0 0 5px;font-size:14px}.panel-sub{font-size:12px;color:#7c888b;margin:0 0 24px}.control{margin-bottom:17px}.control label{display:block;font-weight:650;color:#4d5b62;margin-bottom:7px;font-size:12px}.control textarea,.control select,.control input[type="text"],.control input[type="number"]{display:block;width:100%;border:1px solid #dce1e1;background:white;border-radius:6px;padding:10px;color:var(--ink);resize:vertical}.control textarea{min-height:80px}.control input[type="range"]{width:100%;accent-color:var(--accent)}.control .value{display:flex;align-items:center;justify-content:space-between;gap:12px}.control small{color:#67747b}.sample{border:1px solid #e0e5e4;border-radius:7px;background:#f7faf7;padding:11px;margin:16px 0;color:#4d6061;font-size:11px}.btn{border:1px solid #24473f;background:var(--accent);color:white;border-radius:7px;padding:11px 15px;font-size:12px;font-weight:750}.btn.block{width:100%}.btn.secondary{border-color:#d3dcda;background:#fff;color:#305b50}.btn:disabled{opacity:.5;cursor:not-allowed}.small-note{font-size:11px;color:#808c91;line-height:1.6;margin-top:12px}.below{display:grid;grid-template-columns:1.15fr 1fr;gap:25px;padding:30px 0 42px}.pane{background:white;border:1px solid var(--line);border-radius:10px;padding:25px}.pane h3{font-size:16px;margin:0 0 10px;letter-spacing:-.3px}.pane p{color:#637178;font-size:13px;margin:0 0 18px}.feature-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.feature{background:#f7f9f7;border:1px solid #e8ece8;padding:12px;border-radius:7px;font-size:12px;color:#4b5d61}.feature b{display:block;color:#253936;font-size:13px;margin-bottom:3px}.steps{display:grid;gap:10px}.step{display:flex;gap:13px;align-items:flex-start;font-size:12px;color:#68777d}.step i{font-style:normal;display:grid;place-items:center;background:#e8eee9;color:#345d50;width:26px;height:26px;flex:0 0 auto;border-radius:7px;font-weight:800}.step strong{display:block;color:#24363b;font-size:13px;margin-bottom:3px}.footer{border-top:1px solid var(--line);color:#849097;font-size:11px;padding:21px 0 27px;display:flex;justify-content:space-between;gap:20px}.footer a{text-decoration:underline}
-@media(max-width:1120px){.workspace{grid-template-columns:196px minmax(0,1fr) 265px}.main{padding:18px 15px}.right{padding:18px 14px}.left{padding:18px 10px}}
-@media(max-width:900px){.workspace{grid-template-columns:1fr}.left{display:flex;gap:5px;align-items:center;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:10px}.side-h,.side-foot,.side-section{display:none}.side-item{margin:0;white-space:nowrap;padding:8px 10px;font-size:12px}.left .side-item{display:flex}.main{padding:17px 20px}.right{border-left:0;border-top:1px solid var(--line);padding:21px}.preview-area{min-height:350px}.video-stage{height:322px}.below{grid-template-columns:1fr 1fr}.head-tag{display:none}}
-@media(max-width:640px){.page{padding:0 14px}.top-inner{min-height:58px}.logo{font-size:14px}.brand-icon{width:31px;height:31px}.meta{font-size:10px}.nav{gap:9px;font-size:11px}.nav a:not(.outline){display:none}.nav .outline{padding:8px 9px}.head{padding:26px 0 20px}.head h1{font-size:29px;letter-spacing:-1.1px}.lead{font-size:13px}.main{padding:15px}.section-top h2{font-size:14px}.preview-area{min-height:335px}.video-stage{height:315px}.below{grid-template-columns:1fr;gap:12px;padding:17px 0 30px}.pane{padding:18px}.feature-grid{grid-template-columns:1fr 1fr}.footer{flex-direction:column;gap:5px}.side-item{font-size:11px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#f5f4f0">
+  <title>VietFrame Studio — Mở studio</title>
+  <meta http-equiv="refresh" content="1;url=https://vietframe-studio-app.onrender.com/login">
+  <style>body{font:15px/1.6 Inter,Segoe UI,Arial,sans-serif;background:#f5f4f0;color:#26332f;margin:0;min-height:100dvh;display:grid;place-items:center;padding:20px}main{max-width:480px;width:100%;background:#fff;border:1px solid #dfe6e2;border-radius:14px;padding:35px;box-shadow:0 15px 30px #1c332112}h1{font-size:26px;margin:0 0 10px;letter-spacing:-1px}p{color:#5d6964;margin:8px 0 20px}a{display:block;text-align:center;background:#2e5c54;color:white;padding:12px;border-radius:7px;font-weight:700;text-decoration:none}.note{font-size:12px;color:#78817c;margin-top:18px}</style>
+  <script>location.replace("https://vietframe-studio-app.onrender.com/login");</script>
 </head>
-<body>
-<header class="top"><div class="page top-inner">
-<a class="logo" href="/" aria-label="VietFrame Studio, trang chủ"><span class="brand-icon">V</span><span>VietFrame Studio</span></a>
-<span class="meta">Bản xem trước miễn phí</span>
-<nav class="nav"><a href="#workstation">Không gian làm việc</a><a href="#features">Chức năng</a><a class="outline" href="https://github.com/lenhatbin1905-arch/cinema-nova-cloud/tree/feature/vietframe-studio-free-first-v02" target="_blank" rel="noopener noreferrer">Mã nguồn GitHub ↗</a></nav>
-</div></header>
-<main class="page">
-<div class="head">
-<div><div class="eyebrow">Video editing workspace</div><h1>Phụ đề đẹp bắt đầu từ<br>chính video gốc.</h1><p class="lead">Một không gian biên tập tập trung vào độ rõ của hình ảnh, kiểu chữ và tiếng nói. Trước mắt bạn là bản xem trước giao diện, không phải hệ thống render trực tuyến.</p></div>
-<div class="head-tag"><strong>V0.6</strong> · Free-first · Giao diện thử nghiệm</div>
-</div>
-<section class="workspace" id="workstation" aria-label="Trình biên tập phụ đề">
-<aside class="left">
-<div class="side-h">WORKSPACE</div>
-<div class="side-item active"><span class="glyph">▣</span>Phụ đề & kiểu chữ</div>
-<div class="side-item"><span class="glyph">▶</span>Xem trước</div>
-<div class="side-item"><span class="glyph">◫</span>Video cục bộ</div>
-<div class="side-section"><div class="side-h">DỰ KIẾN</div><div class="side-item"><span class="glyph">◌</span>Xóa chữ chuyển động</div><div class="side-item"><span class="glyph">♫</span>Lồng tiếng Việt</div><div class="side-item"><span class="glyph">✦</span>Tạo video</div></div>
-<div class="side-foot">Bản thử không tải video lên máy chủ. File được phát ngay trong trình duyệt của bạn.</div>
-</aside>
-<div class="main">
-<div class="section-top"><h2>Trình xem video</h2><small>9:16 · Xem trước cục bộ</small></div>
-<div class="preview-area"><div class="video-stage" id="stage" data-style="bold">
-<video id="sourceVideo" controls playsinline preload="metadata" aria-label="Video tải từ thiết bị"></video>
-<div class="placeholder" id="placeholder"><span>▣</span><strong>Chưa có video</strong><div>Chọn MP4, MOV hoặc WebM bên dưới</div></div>
-<div class="subtitle" id="caption"><span id="captionText">Chữ tiếng Việt rõ nét, <mark>đúng phong cách.</mark></span></div>
-</div></div>
-<div class="play-controls"><span class="dot"></span><strong id="filename">Video trên thiết bị</strong><span class="info" id="duration">Chưa tải video</span></div>
-<label class="drag" id="dropTarget">▤ <span><strong>Chọn video từ máy hoặc điện thoại</strong><br>Hoặc kéo thả vào đây · không tải lên server</span>
-<input id="videoInput" type="file" accept="video/mp4,video/webm,video/quicktime,video/*"></label>
-</div>
-<aside class="right">
-<h2 class="panel-h">Thiết lập phụ đề</h2><p class="panel-sub">Thay đổi trực tiếp trên khung xem trước.</p>
-<div class="control"><label for="captionInput">Nội dung tiếng Việt</label><textarea id="captionInput" maxlength="180" spellcheck="true">Chữ tiếng Việt rõ nét, đúng phong cách.</textarea></div>
-<div class="control"><label for="preset">Kiểu hiển thị</label><select id="preset"><option value="bold">Đậm, viền đen, nhấn vàng</option><option value="cinema">Phim tài liệu</option><option value="clean">Tối giản</option></select></div>
-<div class="control"><div class="value"><label for="fontSize">Kích thước chữ</label><small id="fontSizeValue">20 px</small></div><input type="range" min="12" max="38" value="20" id="fontSize"></div>
-<div class="control"><div class="value"><label for="position">Vị trí phụ đề</label><small id="positionValue">12%</small></div><input type="range" min="5" max="35" value="12" id="position"></div>
-<div class="sample">Đây là phần <b>xem trước kiểu chữ</b>. Xóa chữ/logo, lồng tiếng ElevenLabs và xuất video MP4 cần backend xử lý; chưa hoạt động trên bản web tĩnh.</div>
-<button type="button" class="btn block" id="downloadSrt">Tải phụ đề .SRT</button>
-<div class="small-note" id="message" aria-live="polite">Tệp SRT thử nghiệm gồm một câu phụ đề, từ giây 0 đến giây 5.</div>
-</aside></section>
-<div class="below" id="features">
-<section class="pane"><h3>Những gì đang được phát triển</h3><p>Mục tiêu của VietFrame là dịch video mà vẫn giữ nét chữ gốc và độ tự nhiên của hình ảnh.</p>
-<div class="feature-grid"><div class="feature"><b>Font Match</b>Mô phỏng độ dày, màu, viền và vị trí</div><div class="feature"><b>Caption Cleanup</b>Xóa chữ cũ theo vùng thay vì che nguyên dải</div><div class="feature"><b>Vietnamese Dubbing</b>Đường liên kết ElevenLabs hoặc giọng miễn phí</div><div class="feature"><b>Video Creator</b>Tạo video qua mô hình được cấp quyền</div></div></section>
-<section class="pane"><h3>Trạng thái triển khai</h3><p>Đây là bản giới thiệu giao diện công khai; các tác vụ nhạy cảm chưa mở trên hosting miễn phí.</p>
-<div class="steps"><div class="step"><i>✓</i><span><strong>Miễn phí tên miền phụ</strong>Trang có HTTPS qua hạ tầng Render.</span></div><div class="step"><i>✓</i><span><strong>Thử giao diện với video cá nhân</strong>Video chỉ phát cục bộ, không gửi về server.</span></div><div class="step"><i>→</i><span><strong>Backend đang được hoàn thiện</strong>Cần lưu trữ bền vững trước khi mở tài khoản, API key và render.</span></div></div>
-</section>
-</div>
-</main>
-<footer class="page footer"><span>© VietFrame Studio · Free-first development preview</span><span>Thiết kế tập trung vào công năng, không lưu video người dùng · <a href="https://github.com/lenhatbin1905-arch/cinema-nova-cloud" target="_blank" rel="noopener noreferrer">GitHub</a></span></footer>
-<script>
-(function(){
-"use strict";
-var inp=document.getElementById("videoInput"),v=document.getElementById("sourceVideo"),stage=document.getElementById("stage"),drop=document.getElementById("dropTarget"),caption=document.getElementById("caption"),txt=document.getElementById("captionText"),box=document.getElementById("captionInput"),preset=document.getElementById("preset"),size=document.getElementById("fontSize"),pos=document.getElementById("position"),message=document.getElementById("message"),objectURL=null;
-function renderCaption(){
-var val=box.value.trim()||" ";
-txt.textContent=val;
-stage.dataset.style=preset.value;
-caption.style.fontSize=size.value+"px";
-caption.style.bottom=pos.value+"%";
-document.getElementById("fontSizeValue").textContent=size.value+" px";
-document.getElementById("positionValue").textContent=pos.value+"%";
-if(preset.value==="bold"){
-var words=val.split(" ");if(words.length>4){
-txt.textContent=words.slice(0,-2).join(" ")+" ";
-var mark=document.createElement("mark");mark.textContent=words.slice(-2).join(" ");txt.appendChild(mark);
-}
-}
-}
-function loadFile(f){
-if(!f)return;
-if(!f.type.startsWith("video/")){message.textContent="Vui lòng chọn một tệp video hợp lệ.";return;}
-if(objectURL)URL.revokeObjectURL(objectURL);
-objectURL=URL.createObjectURL(f);v.src=objectURL;v.style.display="block";document.getElementById("placeholder").style.display="none";document.getElementById("filename").textContent=f.name;document.getElementById("duration").textContent=(f.size/1024/1024).toFixed(1)+" MB · Chỉ xem cục bộ";v.load();message.textContent="Đã mở video trên thiết bị. Không có dữ liệu nào được tải lên.";
-}
-inp.addEventListener("change",function(){loadFile(inp.files&&inp.files[0]);});
-drop.addEventListener("dragover",function(e){e.preventDefault();drop.classList.add("dragover");});
-drop.addEventListener("dragleave",function(){drop.classList.remove("dragover");});
-drop.addEventListener("drop",function(e){e.preventDefault();drop.classList.remove("dragover");loadFile(e.dataTransfer.files&&e.dataTransfer.files[0]);});
-[box,preset,size,pos].forEach(function(el){el.addEventListener("input",renderCaption);el.addEventListener("change",renderCaption);});
-document.getElementById("downloadSrt").addEventListener("click",function(){
-var line=(box.value.trim()||"Phụ đề tiếng Việt").replace(/\s+/g," ");
-var srt="1\n00:00:00,000 --> 00:00:05,000\n"+line+"\n";
-var blob=new Blob([srt],{type:"text/plain;charset=utf-8"});var url=URL.createObjectURL(blob);
-var a=document.createElement("a");a.href=url;a.download="vietframe-phu-de-thu.srt";document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
-message.textContent="Đã tải phụ đề SRT 0–5 giây. Video chưa được render.";
-});
-renderCaption();
-})();
-</script>
-</body></html>
+<body><main><h1>VietFrame Studio</h1><p>Đang mở hệ thống thật với Gemini, ElevenLabs và công cụ dựng video.</p><a href="https://vietframe-studio-app.onrender.com/login">Mở studio đầy đủ</a><p class="note">Bản thử Render Free: dữ liệu và liên kết API có thể mất khi máy chủ khởi động lại. Chưa phù hợp lưu trữ dài hạn.</p></main></body>
+</html>
