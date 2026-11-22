@@ -66,12 +66,8 @@ def test_unknown_voice_id_fails_closed(fake_free):
         eleven.preflight_free_voices(['deleted_voice'],200)
 
 
-@pytest.mark.parametrize('invalid_ids',[[],[''],['?invalid'],['id']*17])
+@pytest.mark.parametrize('invalid_ids',[[],[''],['?invalid'],[f'voice_{i}' for i in range(17)]])
 def test_malformed_voice_ids_rejected_without_api_calls(fake_free,invalid_ids):
-    if invalid_ids == ['id']*17:
-        # A duplicate is not 17 distinct speakers; should deduplicate to one.
-        assert eleven.preflight_free_voices(invalid_ids,100)['voices_checked']==1 if False else True
-        return
     with pytest.raises(ValueError,match='không hợp lệ'):
         eleven.preflight_free_voices(invalid_ids,100)
     assert fake_free==[]

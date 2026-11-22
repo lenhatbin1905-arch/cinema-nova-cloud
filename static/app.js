@@ -488,7 +488,7 @@ async function loadElevenStatus(){
 }
 async function linkEleven(event){
  event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
- try{const result=await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();if(result.warning){toast('Đã kết nối ElevenLabs để chọn giọng. Cần thêm User → Read trước khi tạo tiếng.',true);}else{toast('Đã kết nối ElevenLabs thành công.');}}
+ try{const result=await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();if(result.warning){toast('Đã kết nối ElevenLabs để chọn giọng. Cần thêm User → Read trước khi tạo tiếng.',true);}else{toast('API ElevenLabs đã liên kết; quyền sử dụng giọng được kiểm tra riêng trước khi tạo video.');}}
  catch(e){text($('#elevenlabs-status'), 'Không thể liên kết: '+e.message);showError(e);}finally{input.value='';button.disabled=false;}
 }
 async function unlinkEleven(){
