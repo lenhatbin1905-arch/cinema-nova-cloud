@@ -13,7 +13,7 @@ COPY tests ./tests
 RUN python -m compileall -q app \
  && node --check static/app.js \
  && pip install --no-cache-dir 'pytest>=8,<10' \
- && pytest -q tests
+ && python -m pytest -q tests
 ENV VIETFRAME_DATA=/data VIETFRAME_HOST=0.0.0.0 VIETFRAME_PORT=8010
 EXPOSE 10000
 # Render auto-configures PORT; startup rejects any unauthenticated media API request.
