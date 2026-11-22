@@ -2,7 +2,7 @@
 'use strict';
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
-const state = { projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source' };
+const state = { csrf: '', accountEmail: '', projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source' };
 const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
 const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating'];
 
@@ -11,7 +11,11 @@ function toast(message, error=false) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => el.className = '', 6000);
 }
 async function request(url, options = {}) {
-  const response = await fetch(url, options);
+  const method = (options.method || 'GET').toUpperCase();
+  const headers = new Headers(options.headers || {});
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && state.csrf) headers.set('X-CSRF-Token', state.csrf);
+  const response = await fetch(url, {...options, headers, credentials:'same-origin'});
+  if (response.status === 401) { window.location.replace('/login'); throw new Error('Phiên đã hết hạn.'); }
   const raw = await response.text();
   let body; try { body = JSON.parse(raw); } catch { body = {detail: raw.slice(0,500) || `HTTP ${response.status}`}; }
   if (!response.ok) {
@@ -241,7 +245,35 @@ async function generateAI(){
     const p=await apiPost('/api/ai/create-video',{prompt});toast('Đã gửi tác vụ tạo video đến GPU cục bộ.');await loadProjects();await selectProject(p.id);
   }catch(e){showError(e);}
 }
+async function authorize(){
+  try {
+    const identity = await request('/api/auth/me');
+    state.csrf = identity.csrf;
+    state.accountEmail = identity.email;
+    text($('#account-email'), identity.email);
+    init();
+  } catch (_) { window.location.replace('/login'); }
+}
+async function signOut(){
+  try { await apiPost('/api/auth/logout', {}); }
+  finally { window.location.replace('/login'); }
+}
+async function changePassword(event){
+  event.preventDefault();
+  const old_password=$('#current-password').value;
+  const new_password=$('#new-password').value;
+  const submit=$('#change-password-form button[type="submit"]');
+  submit.disabled=true;
+  try {
+    await apiPost('/api/auth/change-password',{old_password,new_password});
+    $('#change-password-form').reset();
+    window.location.replace('/login');
+  } catch(e){ text($('#password-message'),e.message); toast(e.message,true); }
+  finally {submit.disabled=false;}
+}
 function init(){
+  $('#logout-button').addEventListener('click',signOut);
+  $('#change-password-form').addEventListener('submit',changePassword);
   $$('.nav-item').forEach(x=>x.addEventListener('click',()=>switchView(x.dataset.view)));
   $('#top-new').addEventListener('click',()=>{switchView('projects');$('#video-url').focus();});
   $('#add-url').addEventListener('click',addLink);
@@ -277,4 +309,4 @@ function init(){
   $('#ai-generate').addEventListener('click',generateAI);
   updateStylePreview();loadProjects();loadCapabilities();
 }
-document.addEventListener('DOMContentLoaded',init);
+document.addEventListener('DOMContentLoaded',authorize);

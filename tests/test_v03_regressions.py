@@ -78,7 +78,7 @@ def test_response_security_headers_and_version(client):
     assert response.headers['X-Frame-Options']=='DENY'
     assert 'object-src' in response.headers['Content-Security-Policy']
     assert response.headers['X-Content-Type-Options']=='nosniff'
-    assert client.get('/api/health').json()['version']=='0.3.0'
+    assert client.get('/api/health').json()['version']=='0.4.0'
     assert client.get('/api/projects').headers['Cache-Control']=='no-store'
 
 
@@ -104,6 +104,7 @@ def test_atomic_export_does_not_publish_invalid_temp(tmp_path,monkeypatch):
 
 
 def test_no_public_auth_claim(client):
-    # The local-only MVP is intentionally not certified for public deployment.
+    # Single owner is protected, but public-hosting hardening is still required.
     assert config.MAX_UPLOAD_MB > 0
     assert client.get('/api/health').json()['mode']=='local-first'
+    assert client.get('/api/auth/me').status_code==200

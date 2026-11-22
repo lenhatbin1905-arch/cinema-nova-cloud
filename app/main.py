@@ -1,15 +1,16 @@
-"""Local-first video studio API. A production deployment MUST add auth and rate limits."""
+"""Free-first video studio with single-owner sessions and protected media API."""
 import json
+import hmac
 import re
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from . import config, db, jobs, engines
+from . import config, db, jobs, engines, auth
 from .media import probe
 from .subtitles import verify_segments, make_srt, make_ass
 from .url_guard import classify_url
@@ -19,17 +20,31 @@ from .style_match import sample_reference_style
 @asynccontextmanager
 async def lifespan(app):
     db.init_db()
+    auth.init()
     db.mark_interrupted_jobs()
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.3.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.4.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
 @app.middleware('http')
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
+async def security_and_auth(request: Request, call_next):
+    path = request.url.path
+    method = request.method.upper()
+    public = {'/login', '/api/health', '/api/auth/config', '/api/auth/setup', '/api/auth/login'}
+    protected = not (path in public or (path.startswith('/static/') and path != '/static/index.html'))
+    session = auth.get_session(request.cookies.get(auth.COOKIE_NAME)) if protected else None
+    request.state.auth_session = session
+    if protected and session is None:
+        response = RedirectResponse('/login', status_code=303) if path == '/' or path == '/static/index.html' else JSONResponse({'detail': 'Vui lòng đăng nhập để tiếp tục.'}, status_code=401)
+    elif protected and method in {'POST', 'PUT', 'PATCH', 'DELETE'} and not _same_origin(request):
+        response = JSONResponse({'detail': 'Yêu cầu không cùng nguồn.'}, status_code=403)
+    elif protected and method in {'POST', 'PUT', 'PATCH', 'DELETE'} and not hmac.compare_digest(request.headers.get('X-CSRF-Token', ''), session['csrf']):
+        response = JSONResponse({'detail': 'Mã xác nhận phiên không hợp lệ. Tải lại trang rồi thử lại.'}, status_code=403)
+    else:
+        response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
@@ -39,9 +54,56 @@ async def security_headers(request: Request, call_next):
         "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
         "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
-    response.headers['Cache-Control'] = 'no-store' if request.url.path.startswith('/api/') else 'no-cache'
+    response.headers['Cache-Control'] = 'no-store' if path.startswith('/api/') or path in {'/', '/login'} else 'no-cache'
     return response
 
+
+def _same_origin(request: Request):
+    # CSRF header is also required. Reject cross-site Origin/Referer when provided.
+    origin = request.headers.get('origin')
+    referer = request.headers.get('referer')
+    host = request.headers.get('host', '')
+    if origin:
+        from urllib.parse import urlsplit
+        return urlsplit(origin).netloc == host
+    if referer:
+        from urllib.parse import urlsplit
+        return urlsplit(referer).netloc == host
+    return True
+
+
+def _setup_authorized(request: Request, provided: str):
+    secret = config.SETUP_TOKEN
+    if secret:
+        return hmac.compare_digest(provided, secret)
+    return (request.client.host if request.client else '') in {'127.0.0.1', '::1', 'localhost'}
+
+
+class OwnerCredentials(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=12, max_length=128)
+
+
+class OwnerSetup(OwnerCredentials):
+    setup_token: str = Field(default='', max_length=256)
+
+
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+def _cookie_secure(request: Request):
+    return config.COOKIE_SECURE or request.url.scheme == 'https'
+
+
+def _start_login(response: JSONResponse, request: Request, user):
+    token, csrf = auth.new_session(user['id'])
+    response = JSONResponse({'email': user['email'], 'csrf': csrf, 'authenticated': True}, status_code=response.status_code)
+    response.set_cookie(auth.COOKIE_NAME, token, httponly=True,
+                        secure=_cookie_secure(request), samesite='strict',
+                        max_age=auth.SESSION_TTL, path='/')
+    return response
 
 
 @app.get('/')
@@ -49,9 +111,79 @@ def homepage():
     return FileResponse(config.PROJECT_ROOT/'static/index.html')
 
 
+@app.get('/login')
+def login_page(request: Request):
+    if auth.get_session(request.cookies.get(auth.COOKIE_NAME)):
+        return RedirectResponse('/', status_code=303)
+    return FileResponse(config.PROJECT_ROOT/'static/login.html')
+
+
+@app.get('/api/auth/config')
+def auth_config(request: Request):
+    return {'setup_required': not auth.has_owner(),
+            'local_setup_allowed': not config.SETUP_TOKEN and _setup_authorized(request, ''),
+            'setup_token_required': bool(config.SETUP_TOKEN)}
+
+
+@app.post('/api/auth/setup', status_code=201)
+def setup(request: Request, credentials: OwnerSetup):
+    if not _same_origin(request):
+        raise HTTPException(403, 'Yêu cầu không cùng nguồn.')
+    if not _setup_authorized(request, credentials.setup_token):
+        raise HTTPException(403, 'Thiết lập chủ sở hữu chỉ được thực hiện cục bộ hoặc bằng mã thiết lập máy chủ.')
+    if auth.has_owner():
+        raise HTTPException(409, 'Tài khoản đã tồn tại. Hãy đăng nhập.')
+    try:
+        user = auth.create_first_owner(credentials.email, credentials.password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return _start_login(JSONResponse({}, status_code=201), request, user)
+
+
+@app.post('/api/auth/login')
+def login(request: Request, credentials: OwnerCredentials):
+    if not _same_origin(request):
+        raise HTTPException(403, 'Yêu cầu không cùng nguồn.')
+    ip = request.client.host if request.client else 'unknown'
+    try:
+        user = auth.validate_login(credentials.email, credentials.password, ip)
+    except PermissionError as exc:
+        raise HTTPException(429, str(exc)) from exc
+    if not user:
+        raise HTTPException(401, 'Email hoặc mật khẩu không đúng.')
+    return _start_login(JSONResponse({}), request, user)
+
+
+@app.get('/api/auth/me')
+def my_account(request: Request):
+    row = request.state.auth_session
+    return {'authenticated': True, 'email': row['email'], 'csrf': row['csrf']}
+
+
+@app.post('/api/auth/logout')
+def logout(request: Request):
+    auth.revoke_session(request.cookies.get(auth.COOKIE_NAME, ''))
+    response = JSONResponse({'ok': True})
+    response.delete_cookie(auth.COOKIE_NAME, path='/', samesite='strict', httponly=True, secure=_cookie_secure(request))
+    return response
+
+
+@app.post('/api/auth/change-password')
+def update_password(request: Request, body: ChangePassword):
+    try:
+        result = auth.change_password(request.state.auth_session['id'], body.old_password, body.new_password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not result:
+        raise HTTPException(422, 'Mật khẩu hiện tại không đúng.')
+    response = JSONResponse({'ok': True, 'login_required': True})
+    response.delete_cookie(auth.COOKIE_NAME, path='/', samesite='strict', httponly=True, secure=_cookie_secure(request))
+    return response
+
+
 @app.get('/api/health')
 def health():
-    return {'status':'ok','version':'0.3.0','mode':'local-first'}
+    return {'status':'ok','version':'0.4.0','mode':'local-first'}
 
 
 @app.get('/api/capabilities')

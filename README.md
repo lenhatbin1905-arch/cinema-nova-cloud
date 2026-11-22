@@ -1,8 +1,8 @@
-# VietFrame Studio (v0.3) — Free-first local video workspace
+# VietFrame Studio (v0.4) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
-> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Chạy local-only; chưa có auth, quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa watermark bằng AI.
+> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Đã có trang đăng nhập, tài khoản chủ sở hữu duy nhất và bảo vệ API bằng cookie phiên + CSRF. Chưa có quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa chữ bằng AI.
 
 ## Có thể dùng ngay khi cài đủ thành phần
 
@@ -26,7 +26,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 127.0.0.1 --port 8010
 ```
 
-Mở **http://127.0.0.1:8010**.
+Mở **http://127.0.0.1:8010/login**. Lần đầu, điền email và tự đặt mật khẩu **tối thiểu 12 ký tự**; hệ thống tự khóa đăng ký tiếp theo. Những lần sau đăng nhập bằng tài khoản này. Không cần dịch vụ Google hay API trả phí.
 
 Nếu muốn chạy Docker:
 
@@ -34,7 +34,7 @@ Nếu muốn chạy Docker:
 docker compose up --build
 ```
 
-Mặc định chỉ mở cổng 8010 trên `127.0.0.1`; project/video lưu ở `./workspace` và không commit vào Git.
+Mặc định chỉ mở cổng 8010 trên `127.0.0.1`; project/video và database tài khoản lưu ở `./workspace` và không commit vào Git. Nếu chạy qua Docker/VM khiến server thấy IP khác loopback, đặt một mã thiết lập dài bằng `VIETFRAME_SETUP_TOKEN` trong biến môi trường trước khi tạo tài khoản đầu tiên; không chia sẻ mã này công khai. Mẫu cấu hình: `.env.example`.
 
 ## Bật AI miễn phí (không dùng API trả phí)
 
@@ -52,19 +52,19 @@ pip install -r requirements-ai.txt
 
 ## Font giống video gốc
 
-Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.3 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
+Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.4 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
 
 ## Quyền sử dụng và an toàn
 
 Chỉ nhập video mà bạn có quyền tải/chỉnh sửa hoặc được chủ sở hữu cho phép. Không sử dụng để xóa watermark nhằm mạo nhận quyền tác giả. Không gửi mật khẩu, cookie Facebook hoặc key API qua giao diện.
 
-**Không triển khai public phiên bản này.** Trước khi phát hành phải bổ sung xác thực, phân quyền, giới hạn tác vụ, bảo vệ tải lên, lưu trữ object, kiểm tra URL/redirect sâu hơn, chặn SSRF toàn pipeline, giám sát tác vụ, chống abuse, chính sách quyền tác giả và tác vụ hàng đợi bền vững. Docker expose local-only.
+**Chưa đủ điều kiện triển khai Internet công khai.** Bản v0.4 đã có xác thực một chủ sở hữu, băm PBKDF2, cookie HttpOnly/SameSite Strict, CSRF, khóa đăng ký sau tài khoản đầu tiên và chống brute force cơ bản. Khi đưa lên Internet cần HTTPS với `VIETFRAME_COOKIE_SECURE=true`, kiểm tra URL/redirect sâu hơn, chống SSRF toàn pipeline, giới hạn tác vụ/tải lên theo IP, backup database và file, giám sát chống lạm dụng, snapshot/restore và audit độc lập. Không chia sẻ tài khoản với nhiều người; dự án chưa tách biệt theo user. Docker expose local-only.
 
 ## API chính
 
-`GET /api/health`, `GET /api/capabilities`, `GET /api/projects`, `POST /api/projects/upload`, `POST /api/projects/from-url`, `PUT /api/projects/{id}/segments`, `POST /api/projects/{id}/transcribe`, `POST /api/projects/{id}/translate`, `POST /api/projects/{id}/render`, `POST /api/projects/{id}/dub`, `GET /api/voices`, `GET /api/projects/{id}/file/{source|export}`, `GET /api/projects/{id}/subtitles.srt`, `GET /api/projects/{id}/reference-style`, `POST /api/ai/create-video`.
+`GET /api/health`, `GET /api/auth/config`, `POST /api/auth/setup`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`, `GET /api/capabilities`, `GET /api/projects`, `POST /api/projects/upload`, `POST /api/projects/from-url`, `PUT /api/projects/{id}/segments`, `POST /api/projects/{id}/transcribe`, `POST /api/projects/{id}/translate`, `POST /api/projects/{id}/render`, `POST /api/projects/{id}/dub`, `GET /api/voices`, `GET /api/projects/{id}/file/{source|export}`, `GET /api/projects/{id}/subtitles.srt`, `GET /api/projects/{id}/reference-style`, `POST /api/ai/create-video`.
 
-API docs: http://127.0.0.1:8010/api/docs
+API docs (cần đăng nhập): http://127.0.0.1:8010/api/docs. Mọi API video đều đòi cookie phiên; các lệnh thay đổi yêu cầu header `X-CSRF-Token`, lấy từ `/api/auth/me`.
 
 ## Kiểm thử
 
@@ -73,7 +73,7 @@ pip install pytest httpx
 pytest -q
 ```
 
-Kiểm thử bảo đảm validate link, quyền sử dụng, upload thật, phụ đề Unicode, render FFmpeg và lỗi rõ ràng khi thiếu model. Chưa kiểm thử tải video từ 6 dịch vụ thật vì cần URL công khai hợp lệ và mạng. Đó là một phần nghiệm thu tích hợp, không được tuyên bố PASS khi chưa chạy.
+Kiểm thử bao gồm xác thực/đăng xuất/đổi mật khẩu/khóa brute force/CSRF/quyền truy cập video, validate link, quyền sử dụng, upload thật, phụ đề Unicode, render FFmpeg và lỗi rõ ràng khi thiếu model. Chưa kiểm thử tải video từ 6 dịch vụ thật vì cần URL công khai hợp lệ và mạng. Đó là một phần nghiệm thu tích hợp, không được tuyên bố PASS khi chưa chạy.
 
 ## Roadmap có thứ tự
 
@@ -83,6 +83,14 @@ Kiểm thử bảo đảm validate link, quyền sử dụng, upload thật, ph�
 4. **Vietnamese dubbing**: pipeline Kokoro local đã có, còn cần trộn riêng thoại/nhạc, hỗ trợ multi-speaker, đánh giá giọng thực tế và lip-sync.
 5. **Frame inpainting**: xóa chữ gốc có kiểm soát và phép đo flicker/ghosting.
 6. **Cinema**: image-to-video, storyboard, nhiều cảnh, nhất quán nhân vật, GPU worker.
-7. **Production**: auth, HTTPS, queues, object storage, CI, snapshots, restore, metrics, bảo mật.
+7. **Production**: đăng nhập chủ sở hữu đã có ở v0.4; tiếp theo HTTPS, phân quyền nhiều người dùng, queues, object storage, CI, snapshots, restore, metrics và đánh giá bảo mật chuyên sâu.
 
 Xem [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) để biết chuẩn nghiệm thu tránh tự chấm điểm quá lạc quan.
+
+## Tài khoản và khôi phục
+
+- Không có mật khẩu mặc định hoặc tài khoản cài sẵn. Tài khoản đầu tiên do chính chủ sở hữu tạo tại `/login`.
+- Không mở đăng ký tự do; bản này chỉ hỗ trợ một người sử dụng vì các dự án chưa có trường user_id.
+- Đổi mật khẩu trong **Hệ thống → Đổi mật khẩu**; thao tác này kết thúc toàn bộ phiên đăng nhập.
+- Mất mật khẩu: quản trị viên có quyền máy chủ phải khôi phục qua cơ chế quản trị ngoài ứng dụng. Không có lối vào mặc định hoặc mật khẩu bí mật được tích hợp.
+- Trên HTTPS, bắt buộc đặt `VIETFRAME_COOKIE_SECURE=true` và cấu hình reverse proxy chuyển scheme tin cậy.

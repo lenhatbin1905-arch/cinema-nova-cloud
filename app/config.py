@@ -15,3 +15,9 @@ VIDEO_MODEL_ID = os.getenv('VIDEO_MODEL_ID', 'THUDM/CogVideoX-2b')
 KOKORO_TTS_URL = os.getenv('KOKORO_TTS_URL', '').rstrip('/')
 
 KOKORO_TTS_API_KEY = os.getenv('KOKORO_TTS_API_KEY', '')
+
+# If deploying remotely, set this to a long random value to unlock one-time account setup.
+# Without a token, first-owner setup is restricted to loopback clients.
+SETUP_TOKEN = os.getenv('VIETFRAME_SETUP_TOKEN', '')
+# Set true behind an HTTPS reverse proxy. Cookies automatically use Secure for HTTPS requests.
+COOKIE_SECURE = os.getenv('VIETFRAME_COOKIE_SECURE', 'false').lower() == 'true'

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f7f7f3" />
+  <meta name="description" content="Đăng nhập VietFrame Studio — Không gian quản lý và biên tập video riêng tư." />
+  <title>Đăng nhập — VietFrame Studio</title>
+  <link rel="stylesheet" href="/static/login.css" />
+  <script defer src="/static/login.js"></script>
+</head>
+<body>
+  <main class="auth-layout">
+    <section class="intro" aria-label="Giới thiệu VietFrame Studio">
+      <a href="/login" class="brand" aria-label="VietFrame Studio">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>vietframe<span class="brand-sub">STUDIO</span></span>
+      </a>
+      <div class="intro-content">
+        <span class="eyebrow">YOUR CREATIVE WORKSPACE</span>
+        <h1>Không gian riêng<br />cho những thước phim <em>của bạn.</em></h1>
+        <p>Một nơi để nhập video, biên tập phụ đề, xây dựng giọng đọc và đưa câu chuyện đến đúng người xem.</p>
+        <div class="preview-card" aria-hidden="true">
+          <div class="preview-card-top"><span class="tiny-square"></span><span>PROJECT WORKSPACE</span><span>01 / 03</span></div>
+          <div class="mock-timeline"><div class="mock-video"><span class="play-icon">▶</span></div><div class="mock-waves"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="mock-rows"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+      <p class="intro-foot">Thiết kế dành cho người làm nội dung · Free-first by design</p>
+    </section>
+    <section class="auth-side" aria-label="Đăng nhập tài khoản">
+      <div class="auth-container">
+        <div class="micro-top"><span class="line"></span><span>VIETFRAME / ACCOUNT</span></div>
+        <div class="heading"><span class="category" id="form-category">TÀI KHOẢN CỦA BẠN</span><h2 id="form-title">Chào mừng trở lại.</h2><p id="form-desc">Đăng nhập để tiếp tục dự án còn dang dở.</p></div>
+        <form id="auth-form" autocomplete="on" novalidate>
+          <div class="field"><label for="email">Địa chỉ email</label><input id="email" name="email" type="email" inputmode="email" autocomplete="username" placeholder="tenban@example.com" required maxlength="254" /></div>
+          <div class="field"><div class="field-label"><label for="password">Mật khẩu</label><span id="password-hint" class="muted"></span></div><div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required minlength="12" maxlength="128" /><button type="button" id="toggle-password" aria-label="Hiện mật khẩu" aria-pressed="false">Hiện</button></div></div>
+          <div class="field hidden" id="confirm-wrap"><label for="confirm-password">Nhập lại mật khẩu</label><input id="confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" /></div>
+          <div class="field hidden" id="setup-wrap"><label for="setup-token">Mã thiết lập máy chủ</label><input id="setup-token" type="password" autocomplete="off" placeholder="Lấy từ cấu hình máy chủ" /><small>Mã này chỉ cần khi tạo tài khoản đầu tiên từ địa chỉ không phải localhost.</small></div>
+          <p id="form-message" class="form-message" role="alert" aria-live="polite"></p>
+          <button type="submit" id="submit-button" class="submit-button"><span id="submit-label">Đăng nhập</span><span aria-hidden="true">↗</span></button>
+        </form>
+        <div class="security-note"><span class="lock-icon" aria-hidden="true">▣</span><p>Mật khẩu được bảo vệ bằng thuật toán băm. Studio không yêu cầu dịch vụ đăng nhập trả phí.</p></div>
+        <p class="bottom-note">© VietFrame Studio · Một không gian riêng, chỉ dành cho bạn.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

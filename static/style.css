@@ -23,3 +23,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .sidebar-nav .nav-item{min-width:0;white-space:normal;background:#fbfbf9;border:1px solid #e5e8e2;border-radius:8px;padding:9px 10px;font-size:11.5px}
   .sidebar-nav .nav-item.active{background:#dee7de;border-color:#cad8cb}
 }
+
+/* v0.4 — owner account and security settings */
+.account-email{font-size:11px;color:#68806e;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-button{background:transparent;border:1px solid #d9e2d7;border-radius:7px;padding:8px 10px;color:#496753;font-size:11px;font-weight:650;cursor:pointer}
+.logout-button:hover{background:#edf3ea}
+.account-panel{margin-top:19px;max-width:570px}
+.account-panel form{display:grid;gap:10px;max-width:430px}
+.account-panel label{display:block;font-size:12px;font-weight:700;color:#5c7562}
+.account-panel input{width:100%;border-radius:7px;background:white;border:1px solid #d5e1d6;padding:11px 13px;color:#23392e}
+.account-panel button{margin-top:8px;max-width:220px}
+@media(max-width:760px){.account-email{display:none}.logout-button{font-size:10px;padding:7px 9px}}
