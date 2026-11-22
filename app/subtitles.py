@@ -56,7 +56,8 @@ def make_ass(segments: list, style: dict, resolution=(1080,1920)) -> str:
         raise ValueError('Tên font không hợp lệ.')
     color = sanitize_color(style.get('color', '#FFFFFF'))
     outline_color = sanitize_color(style.get('outline_color','#121212'))
-    fontsize = int(style.get('font_size', 68))
+    fontsize = int(style.get('font_size', 32))
+    highlight_color=sanitize_color(style.get('highlight_color','#FFD42A'))
     outline = int(style.get('outline', 4))
     margin_v = int(style.get('margin_v', 155))
     bold = int(bool(style.get('bold', True))) * -1
@@ -83,5 +84,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Escape ASS override syntax, so foreign subtitles cannot inject styling commands.
         safe = s['text'].replace('\\', '＼').replace('{','｛').replace('}','｝')
         safe = safe.replace('\r',' ').replace('\n','\\N')
+        # Safe [[emphasis]] markers become yellow foreground ASS tags.
+        safe = re.sub(r'\[\[([^\[\]\n]{1,80})\]\]',
+                      lambda m: '{\\1c' + highlight_color + '}' + m.group(1) + '{\\1c' + color + '}', safe)
         rows.append(f'Dialogue: 0,{time_ass(s["start"])},{time_ass(s["end"])},Main,,0,0,0,,{safe}')
     return header + '\n'.join(rows) + '\n'
