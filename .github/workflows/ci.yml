@@ -27,3 +27,5 @@ jobs:
         run: |
           node --check static/app.js
           node --check static/login.js
+      - name: Build complete Docker image with vendored local AI watermark tool
+        run: docker build --progress=plain -t vietframe-ci .
