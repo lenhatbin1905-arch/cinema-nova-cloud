@@ -169,3 +169,8 @@ Gemini v0.12 thử đường gửi dữ liệu video trực tiếp vào `generat
 ## Khắc phục Gemini 404 khi generateContent (2026-11-22)
 
 Model Gemini 2.5 Flash có thể trả metadata HTTP 200 nhưng generation HTTP 404 cho API key mới, do quyền truy cập model thay đổi. Mặc định chuyển sang `gemini-3.5-flash-lite` (Free Tier); tùy chọn `gemini-3.8-flash` (Free Tier nhưng hạn mức riêng). Xác thực API key bằng model đã chọn và kiểm tra `supportedGenerationMethods` khi Google trả trường này. Phân tích video gửi trực tiếp `inlineData` thay vì tham chiếu Google Files API; nén giữ âm thanh nếu input lớn. Đây là hai cơ chế độc lập để giảm lỗi 404; không thể bảo đảm mọi tài khoản Google đều có quyền/quota. Không tự bật billing.
+
+
+## 2026-11-22 — Ghi nhớ đăng nhập Google
+
+Trên Render, email Google được liên kết với một chủ sở hữu trong Neon; phiên HttpOnly, Secure và CSRF được giữ dưới dạng mã băm và tự gia hạn tối đa một lần/ngày khi sử dụng. Cookie có thời hạn 180 ngày, có đăng xuất thủ công, và đổi mật khẩu thu hồi các phiên. Xóa cookie, mở trình duyệt ẩn danh, thu hồi phiên, hoặc sự cố an ninh vẫn yêu cầu đăng nhập lại. Sau lần chuyển từ SQLite tạm sang Neon, người dùng đăng nhập Google lại **một lần** để tạo tài khoản trong kho bền vững, còn API key Gemini và ElevenLabs trong Neon vẫn được giữ nguyên.

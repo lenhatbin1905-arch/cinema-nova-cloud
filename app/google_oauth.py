@@ -17,7 +17,7 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 import jwt
 
-from . import auth, config
+from . import auth, config, credential_store as store
 
 AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -57,6 +57,13 @@ def _connection():
 
 
 def init():
+    if store.persistent():
+        with store._pg() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS vietframe_google_oauth_states (
+                state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL,
+                nonce TEXT NOT NULL, expires_at BIGINT NOT NULL)""")
+            db.execute('CREATE INDEX IF NOT EXISTS vietframe_google_oauth_states_expiry ON vietframe_google_oauth_states(expires_at)')
+        return
     with _connection() as con:
         con.execute('''CREATE TABLE IF NOT EXISTS google_oauth_states (
             state_hash TEXT PRIMARY KEY,
@@ -79,10 +86,16 @@ def start():
     nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).decode('ascii').rstrip('=')
-    with _connection() as con:
-        con.execute('DELETE FROM google_oauth_states WHERE expires_at < ?', (int(time.time()),))
-        con.execute('''INSERT INTO google_oauth_states(state_hash,verifier,nonce,expires_at)
-            VALUES(?,?,?,?)''', (_digest(state), verifier, nonce, int(time.time()) + STATE_TTL))
+    if store.persistent():
+        with store._pg() as db:
+            db.execute('DELETE FROM vietframe_google_oauth_states WHERE expires_at < %s',(int(time.time()),))
+            db.execute('INSERT INTO vietframe_google_oauth_states(state_hash,verifier,nonce,expires_at) VALUES(%s,%s,%s,%s)',
+                       (_digest(state),verifier,nonce,int(time.time())+STATE_TTL))
+    else:
+        with _connection() as con:
+            con.execute('DELETE FROM google_oauth_states WHERE expires_at < ?', (int(time.time()),))
+            con.execute('''INSERT INTO google_oauth_states(state_hash,verifier,nonce,expires_at)
+                VALUES(?,?,?,?)''', (_digest(state), verifier, nonce, int(time.time()) + STATE_TTL))
     url = AUTHORIZATION_URL + '?' + urlencode({
         'client_id': s['client_id'],
         'redirect_uri': redirect_uri(s),
@@ -100,11 +113,16 @@ def start():
 def consume(state, cookie):
     if not (state and cookie and len(state) <= 128 and len(cookie) <= 128 and hmac.compare_digest(state, cookie)):
         raise PermissionError('Phiên đăng nhập Google không hợp lệ hoặc đã hết hạn.')
-    with _connection() as con:
-        con.execute('BEGIN IMMEDIATE')
-        row = con.execute('SELECT verifier,nonce,expires_at FROM google_oauth_states WHERE state_hash=?',
-                          (_digest(state),)).fetchone()
-        con.execute('DELETE FROM google_oauth_states WHERE state_hash=?', (_digest(state),))
+    if store.persistent():
+        with store._pg() as db:
+            row=db.execute('DELETE FROM vietframe_google_oauth_states WHERE state_hash=%s RETURNING verifier,nonce,expires_at',
+                           (_digest(state),)).fetchone()
+    else:
+        with _connection() as con:
+            con.execute('BEGIN IMMEDIATE')
+            row = con.execute('SELECT verifier,nonce,expires_at FROM google_oauth_states WHERE state_hash=?',
+                              (_digest(state),)).fetchone()
+            con.execute('DELETE FROM google_oauth_states WHERE state_hash=?', (_digest(state),))
     if not row or row[2] <= int(time.time()):
         raise PermissionError('Phiên Google đã hết hạn hoặc đã được sử dụng.')
     return row[0], row[1]

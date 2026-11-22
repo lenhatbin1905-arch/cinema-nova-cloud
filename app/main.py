@@ -48,6 +48,10 @@ async def security_and_auth(request: Request, call_next):
         response = JSONResponse({'detail': 'Mã xác nhận phiên không hợp lệ. Tải lại trang rồi thử lại.'}, status_code=403)
     else:
         response = await call_next(request)
+    if session is not None and session.get('refresh_cookie'):
+        response.set_cookie(auth.COOKIE_NAME, request.cookies.get(auth.COOKIE_NAME),
+                            httponly=True, secure=_cookie_secure(request),
+                            samesite='lax', max_age=auth.SESSION_TTL, path='/')
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
@@ -104,7 +108,7 @@ def _start_login(response: JSONResponse, request: Request, user):
     token, csrf = auth.new_session(user['id'])
     response = JSONResponse({'email': user['email'], 'csrf': csrf, 'authenticated': True}, status_code=response.status_code)
     response.set_cookie(auth.COOKIE_NAME, token, httponly=True,
-                        secure=_cookie_secure(request), samesite='strict',
+                        secure=_cookie_secure(request), samesite='lax',
                         max_age=auth.SESSION_TTL, path='/')
     return response
 

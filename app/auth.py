@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from . import config
 
 COOKIE_NAME = 'vf_session'
-SESSION_TTL = 7 * 24 * 3600
+SESSION_TTL = 180 * 24 * 3600  # User stays signed in on this browser for rolling 180 days
 PASSWORD_ITERATIONS = 600_000
 MAX_FAILED_ATTEMPTS = 8
 FAILURE_WINDOW = 15 * 60
@@ -255,6 +255,24 @@ def _cli():
         return 1
     print('Owner credentials saved. You can now sign in at /login.')
     return 0
+
+
+# Hosted sessions are persisted in Neon, never in Render Free temporary SQLite.
+from . import credential_store as _credential_store
+if _credential_store.persistent():
+    from . import auth_persistent as _remote
+    init = _remote.init
+    has_owner = _remote.has_owner
+    create_first_owner = _remote.create_first_owner
+    google_owner = _remote.google_owner
+    is_login_limited = _remote.is_login_limited
+    record_failure = _remote.record_failure
+    validate_login = _remote.validate_login
+    new_session = _remote.new_session
+    get_session = _remote.get_session
+    revoke_session = _remote.revoke_session
+    change_password = _remote.change_password
+    reset_owner_password = _remote.reset_owner_password
 
 
 if __name__ == '__main__':
