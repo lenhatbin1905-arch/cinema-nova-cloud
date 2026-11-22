@@ -750,7 +750,7 @@ async function changePassword(event){
 function init(){
   $('#logout-button').addEventListener('click',signOut);
   $('#change-password-form').addEventListener('submit',changePassword);
-  $$('.nav-item').forEach(x=>x.addEventListener('click',()=>switchView(x.dataset.view)));
+  $('.nav-item[data-view]').forEach(x=>x.addEventListener('click',()=>switchView(x.dataset.view)));
   $('#top-new').addEventListener('click',()=>{switchView('projects');$('#video-url').focus();});
   $('#license-ok').addEventListener('change', () => {
     if ($('#license-ok').checked) $('#license-ok').closest('.consent')?.classList.remove('needs-confirmation');
