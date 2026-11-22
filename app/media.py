@@ -43,7 +43,8 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
         precision_video(source,cleaned,regions)
     video_input=cleaned if use_glyph else source
     cmd = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-           '-i', video_input.name]
+           '-filter_threads', '1', '-filter_complex_threads', '1',
+           '-threads', '1', '-i', video_input.name]
     if audio:
         cmd += ['-i', audio.name]
     elif use_glyph:
@@ -60,7 +61,7 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
         cmd += ['-map', '1:a:0', '-c:a', 'aac', '-af', 'apad', '-shortest']
     else:
         cmd += ['-map', '1:a?' if use_glyph else '0:a?', '-c:a', 'aac']
-    cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt','yuv420p',
+    cmd += ['-c:v', 'libx264', '-threads', '1', '-preset', 'veryfast', '-crf', '21', '-pix_fmt','yuv420p',
             '-movflags','+faststart', str(temporary)]
     try:
         result = subprocess.run(cmd, cwd=source.parent, capture_output=True, text=True, timeout=1800)
