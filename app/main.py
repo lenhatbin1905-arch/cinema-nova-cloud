@@ -311,6 +311,565 @@ def translate(pid: str,req: TranslateRequest):
 
 
 class CleanupRect(BaseModel):
+    start: float | None = Field(default=None,ge=0,le=1800)
+    end: float | None = Field(default=None,ge=0,le=1800)
+    method: str = Field(default='glyph',pattern='^(glyph|edge) int = Field(ge=0, le=98)
+    y: int = Field(ge=0, le=98)
+    w: int = Field(ge=2, le=100)
+    h: int = Field(ge=2, le=100)
+
+
+class CleanupRequest(BaseModel):
+    regions: list[CleanupRect] = Field(max_length=80)
+
+
+@app.put('/api/projects/{pid}/cleanup')
+def set_cleanup(pid: str, payload: CleanupRequest):
+    p = _find(pid)
+    _ensure_editable(p)
+    try:
+        normalized = cleanup.validate_regions([x.model_dump() for x in payload.regions])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not db.save_cleanup_if_ready(pid, normalized):
+        raise HTTPException(409, 'Dự án đang xử lý.')
+    return _shape(_find(pid))
+
+
+class SubtitleStyle(BaseModel):
+    font: str = 'DejaVu Sans'
+    font_size: int = Field(default=32,ge=20,le=160)
+    highlight_color: str = Field(default='#FFD42A',pattern=r'^#[0-9A-Fa-f]{6}
+    color: str = Field(default='#FFFFFF',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline_color: str = Field(default='#121212',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline: int = Field(default=4,ge=0,le=12)
+    margin_v: int = Field(default=155,ge=10,le=900)
+    bold: bool = True
+
+
+@app.post('/api/projects/{pid}/render',status_code=202)
+def render(pid: str,style: SubtitleStyle):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần nhập ít nhất một câu phụ đề.')
+    if not engines.capabilities()['ffmpeg']:
+        raise HTTPException(503,'Chưa có FFmpeg/ffprobe.')
+    _claim(pid,'rendering','Đã xếp hàng xuất MP4.')
+    jobs.submit(pid,jobs.render,style.model_dump())
+    return {'accepted':True,'project_id':pid}
+
+
+class DubRequest(BaseModel):
+    voice: str = Field(min_length=1,max_length=80,pattern=r'^[a-zA-Z0-9_\-]+$')
+    provider: str = Field(default='kokoro', pattern=r'^(kokoro|elevenlabs)$')
+
+
+@app.get('/api/integrations/elevenlabs')
+def eleven_status():
+    return eleven.is_connected()
+
+
+class ElevenLinkRequest(BaseModel):
+    api_key: str = Field(min_length=16, max_length=256)
+
+
+@app.post('/api/integrations/elevenlabs/link')
+def eleven_link(body: ElevenLinkRequest):
+    try:
+        return eleven.link(body.api_key)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete('/api/integrations/elevenlabs')
+def eleven_disconnect():
+    return eleven.disconnect()
+
+
+@app.get('/api/integrations/elevenlabs/voices')
+def eleven_voices():
+    try:
+        return {'voices': eleven.voices()}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/api/voices')
+def list_voices():
+    if not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa được bật cục bộ.')
+    try:
+        return engines.kokoro_voices()
+    except Exception as exc:
+        raise HTTPException(502,'Không lấy được giọng từ KokoroTTS: '+str(exc)[:100]) from exc
+
+
+@app.post('/api/projects/{pid}/dub',status_code=202)
+def dub_video(pid: str,request: DubRequest):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần có phụ đề đã dịch trước khi lồng tiếng.')
+    if request.provider == 'kokoro' and not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa chạy trên máy cục bộ.')
+    if request.provider == 'elevenlabs':
+        if not eleven.is_connected()['connected']:
+            raise HTTPException(503,'Chưa liên kết ElevenLabs ở Cài đặt.')
+        try:
+            eleven.free_quota_available(sum(len(s['text']) for s in p['segments']))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+    _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')
+    jobs.submit(pid,jobs.dubbing,request.voice,request.provider)
+    return {'accepted':True,'project_id':pid}
+
+
+@app.get('/api/projects/{pid}/reference-style')
+def get_reference_style(pid: str):
+    p=_find(pid)
+    if not p.get('video_file'):
+        raise HTTPException(409,'Chưa có video nguồn.')
+    return sample_reference_style(jobs.path_for(pid)/p['video_file'])
+
+
+class GenerateRequest(BaseModel):
+    prompt: str=Field(min_length=12,max_length=1300)
+
+
+@app.post('/api/ai/create-video',status_code=202)
+def ai_create_video(req: GenerateRequest):
+    if not engines.capabilities()['ai_video_local']:
+        raise HTTPException(503,'AI tạo video chưa khả dụng: cần GPU và model local. Không phát sinh phí API.')
+    pid=uuid4().hex
+    db.create(pid,'Video AI: '+req.prompt[:70],source='ai-video',status='queued')
+    jobs.submit(pid,jobs.ai_video,req.prompt)
+    return _shape(_find(pid))
+
+
+@app.get('/api/projects/{pid}/file/{kind}')
+def media_file(pid: str,kind: str):
+    p=_find(pid)
+    available={'source':p['video_file'],'export':p['output_file'],'dub':p.get('dub_file')}
+    if kind not in available:
+        raise HTTPException(404,'Loại tệp không hợp lệ.')
+    name=available[kind]
+    if not name or Path(name).name!=name:
+        raise HTTPException(404,'Không có tệp này.')
+    file=jobs.path_for(pid)/name
+    if not file.is_file():
+        raise HTTPException(404,'Tệp chưa được tạo.')
+    return FileResponse(file,media_type=('audio/wav' if file.suffix=='.wav' else 'video/mp4' if file.suffix=='.mp4' else None),
+                        filename='vietframe-'+kind+file.suffix if kind=='export' else None)
+
+
+@app.get('/api/projects/{pid}/subtitles.srt')
+def download_srt(pid: str):
+    p=_find(pid)
+    text=make_srt(verify_segments(p['segments'],max(p['duration'],1)))
+    return PlainTextResponse(text,media_type='text/plain; charset=utf-8',
+                             headers={'Content-Disposition':'attachment; filename="vietframe.srt"'})
+
+
+def _find(pid):
+    if not re.fullmatch(r'[0-9a-f]{32}',pid):
+        raise HTTPException(404,'Không có dự án này.')
+    p=db.get(pid)
+    if p is None:
+        raise HTTPException(404,'Không tìm thấy dự án.')
+    return p
+
+
+def _claim(pid, status, message):
+    if not db.claim_ready_project(pid,status,message):
+        raise HTTPException(409,'Dự án đang xử lý. Chỉ có thể chạy một tác vụ tại một thời điểm.')
+
+
+@app.post('/api/projects/{pid}/recover')
+def recover(pid: str):
+    p=_find(pid)
+    if p['status'] != 'error' or not p.get('video_file'):
+        raise HTTPException(409,'Chỉ khôi phục được dự án lỗi có video nguồn.')
+    source=config.PROJECTS_DIR / pid / p['video_file']
+    if not source.is_file():
+        raise HTTPException(409,'Video nguồn không còn tồn tại. Hãy nhập lại từ đầu.')
+    if not db.recover_project(pid):
+        raise HTTPException(409,'Dự án đã thay đổi trạng thái; hãy tải lại.')
+    return _shape(_find(pid))
+
+
+def _ensure_editable(p):
+    if p['status']!='ready':
+        raise HTTPException(409,'Dự án đang xử lý hoặc gặp lỗi; hãy kiểm tra trạng thái trước.')
+
+
+def _shape(p):
+    return {**p,'video_url':f'/api/projects/{p["id"]}/file/source' if p['video_file'] else None,
+            'export_url':f'/api/projects/{p["id"]}/file/export?updated={p["updated_at"]}' if p['output_file'] else None,
+            'dub_url':f'/api/projects/{p["id"]}/file/dub' if p.get('dub_file') else None}
+)
+    x: int = Field(ge=0, le=98)
+    y: int = Field(ge=0, le=98)
+    w: int = Field(ge=2, le=100)
+    h: int = Field(ge=2, le=100)
+
+
+class CleanupRequest(BaseModel):
+    regions: list[CleanupRect] = Field(max_length=3)
+
+
+@app.put('/api/projects/{pid}/cleanup')
+def set_cleanup(pid: str, payload: CleanupRequest):
+    p = _find(pid)
+    _ensure_editable(p)
+    try:
+        normalized = cleanup.validate_regions([x.model_dump() for x in payload.regions])
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not db.save_cleanup_if_ready(pid, normalized):
+        raise HTTPException(409, 'Dự án đang xử lý.')
+    return _shape(_find(pid))
+
+
+class SubtitleStyle(BaseModel):
+    font: str = 'DejaVu Sans'
+    font_size: int = Field(default=68,ge=20,le=160)
+    color: str = Field(default='#FFFFFF',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline_color: str = Field(default='#121212',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline: int = Field(default=4,ge=0,le=12)
+    margin_v: int = Field(default=155,ge=10,le=900)
+    bold: bool = True
+
+
+@app.post('/api/projects/{pid}/render',status_code=202)
+def render(pid: str,style: SubtitleStyle):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần nhập ít nhất một câu phụ đề.')
+    if not engines.capabilities()['ffmpeg']:
+        raise HTTPException(503,'Chưa có FFmpeg/ffprobe.')
+    _claim(pid,'rendering','Đã xếp hàng xuất MP4.')
+    jobs.submit(pid,jobs.render,style.model_dump())
+    return {'accepted':True,'project_id':pid}
+
+
+class DubRequest(BaseModel):
+    voice: str = Field(min_length=1,max_length=80,pattern=r'^[a-zA-Z0-9_\-]+$')
+    provider: str = Field(default='kokoro', pattern=r'^(kokoro|elevenlabs)$')
+
+
+@app.get('/api/integrations/elevenlabs')
+def eleven_status():
+    return eleven.is_connected()
+
+
+class ElevenLinkRequest(BaseModel):
+    api_key: str = Field(min_length=16, max_length=256)
+
+
+@app.post('/api/integrations/elevenlabs/link')
+def eleven_link(body: ElevenLinkRequest):
+    try:
+        return eleven.link(body.api_key)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete('/api/integrations/elevenlabs')
+def eleven_disconnect():
+    return eleven.disconnect()
+
+
+@app.get('/api/integrations/elevenlabs/voices')
+def eleven_voices():
+    try:
+        return {'voices': eleven.voices()}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/api/voices')
+def list_voices():
+    if not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa được bật cục bộ.')
+    try:
+        return engines.kokoro_voices()
+    except Exception as exc:
+        raise HTTPException(502,'Không lấy được giọng từ KokoroTTS: '+str(exc)[:100]) from exc
+
+
+@app.post('/api/projects/{pid}/dub',status_code=202)
+def dub_video(pid: str,request: DubRequest):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần có phụ đề đã dịch trước khi lồng tiếng.')
+    if request.provider == 'kokoro' and not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa chạy trên máy cục bộ.')
+    if request.provider == 'elevenlabs':
+        if not eleven.is_connected()['connected']:
+            raise HTTPException(503,'Chưa liên kết ElevenLabs ở Cài đặt.')
+        try:
+            eleven.free_quota_available(sum(len(s['text']) for s in p['segments']))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+    _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')
+    jobs.submit(pid,jobs.dubbing,request.voice,request.provider)
+    return {'accepted':True,'project_id':pid}
+
+
+@app.get('/api/projects/{pid}/reference-style')
+def get_reference_style(pid: str):
+    p=_find(pid)
+    if not p.get('video_file'):
+        raise HTTPException(409,'Chưa có video nguồn.')
+    return sample_reference_style(jobs.path_for(pid)/p['video_file'])
+
+
+class GenerateRequest(BaseModel):
+    prompt: str=Field(min_length=12,max_length=1300)
+
+
+@app.post('/api/ai/create-video',status_code=202)
+def ai_create_video(req: GenerateRequest):
+    if not engines.capabilities()['ai_video_local']:
+        raise HTTPException(503,'AI tạo video chưa khả dụng: cần GPU và model local. Không phát sinh phí API.')
+    pid=uuid4().hex
+    db.create(pid,'Video AI: '+req.prompt[:70],source='ai-video',status='queued')
+    jobs.submit(pid,jobs.ai_video,req.prompt)
+    return _shape(_find(pid))
+
+
+@app.get('/api/projects/{pid}/file/{kind}')
+def media_file(pid: str,kind: str):
+    p=_find(pid)
+    available={'source':p['video_file'],'export':p['output_file'],'dub':p.get('dub_file')}
+    if kind not in available:
+        raise HTTPException(404,'Loại tệp không hợp lệ.')
+    name=available[kind]
+    if not name or Path(name).name!=name:
+        raise HTTPException(404,'Không có tệp này.')
+    file=jobs.path_for(pid)/name
+    if not file.is_file():
+        raise HTTPException(404,'Tệp chưa được tạo.')
+    return FileResponse(file,media_type=('audio/wav' if file.suffix=='.wav' else 'video/mp4' if file.suffix=='.mp4' else None),
+                        filename='vietframe-'+kind+file.suffix if kind=='export' else None)
+
+
+@app.get('/api/projects/{pid}/subtitles.srt')
+def download_srt(pid: str):
+    p=_find(pid)
+    text=make_srt(verify_segments(p['segments'],max(p['duration'],1)))
+    return PlainTextResponse(text,media_type='text/plain; charset=utf-8',
+                             headers={'Content-Disposition':'attachment; filename="vietframe.srt"'})
+
+
+def _find(pid):
+    if not re.fullmatch(r'[0-9a-f]{32}',pid):
+        raise HTTPException(404,'Không có dự án này.')
+    p=db.get(pid)
+    if p is None:
+        raise HTTPException(404,'Không tìm thấy dự án.')
+    return p
+
+
+def _claim(pid, status, message):
+    if not db.claim_ready_project(pid,status,message):
+        raise HTTPException(409,'Dự án đang xử lý. Chỉ có thể chạy một tác vụ tại một thời điểm.')
+
+
+@app.post('/api/projects/{pid}/recover')
+def recover(pid: str):
+    p=_find(pid)
+    if p['status'] != 'error' or not p.get('video_file'):
+        raise HTTPException(409,'Chỉ khôi phục được dự án lỗi có video nguồn.')
+    source=config.PROJECTS_DIR / pid / p['video_file']
+    if not source.is_file():
+        raise HTTPException(409,'Video nguồn không còn tồn tại. Hãy nhập lại từ đầu.')
+    if not db.recover_project(pid):
+        raise HTTPException(409,'Dự án đã thay đổi trạng thái; hãy tải lại.')
+    return _shape(_find(pid))
+
+
+def _ensure_editable(p):
+    if p['status']!='ready':
+        raise HTTPException(409,'Dự án đang xử lý hoặc gặp lỗi; hãy kiểm tra trạng thái trước.')
+
+
+def _shape(p):
+    return {**p,'video_url':f'/api/projects/{p["id"]}/file/source' if p['video_file'] else None,
+            'export_url':f'/api/projects/{p["id"]}/file/export?updated={p["updated_at"]}' if p['output_file'] else None,
+            'dub_url':f'/api/projects/{p["id"]}/file/dub' if p.get('dub_file') else None}
+)
+    color: str = Field(default='#FFFFFF',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline_color: str = Field(default='#121212',pattern=r'^#[0-9A-Fa-f]{6}$')
+    outline: int = Field(default=4,ge=0,le=12)
+    margin_v: int = Field(default=155,ge=10,le=900)
+    bold: bool = True
+
+
+@app.post('/api/projects/{pid}/render',status_code=202)
+def render(pid: str,style: SubtitleStyle):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần nhập ít nhất một câu phụ đề.')
+    if not engines.capabilities()['ffmpeg']:
+        raise HTTPException(503,'Chưa có FFmpeg/ffprobe.')
+    _claim(pid,'rendering','Đã xếp hàng xuất MP4.')
+    jobs.submit(pid,jobs.render,style.model_dump())
+    return {'accepted':True,'project_id':pid}
+
+
+class DubRequest(BaseModel):
+    voice: str = Field(min_length=1,max_length=80,pattern=r'^[a-zA-Z0-9_\-]+$')
+    provider: str = Field(default='kokoro', pattern=r'^(kokoro|elevenlabs)$')
+
+
+@app.get('/api/integrations/elevenlabs')
+def eleven_status():
+    return eleven.is_connected()
+
+
+class ElevenLinkRequest(BaseModel):
+    api_key: str = Field(min_length=16, max_length=256)
+
+
+@app.post('/api/integrations/elevenlabs/link')
+def eleven_link(body: ElevenLinkRequest):
+    try:
+        return eleven.link(body.api_key)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.delete('/api/integrations/elevenlabs')
+def eleven_disconnect():
+    return eleven.disconnect()
+
+
+@app.get('/api/integrations/elevenlabs/voices')
+def eleven_voices():
+    try:
+        return {'voices': eleven.voices()}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/api/voices')
+def list_voices():
+    if not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa được bật cục bộ.')
+    try:
+        return engines.kokoro_voices()
+    except Exception as exc:
+        raise HTTPException(502,'Không lấy được giọng từ KokoroTTS: '+str(exc)[:100]) from exc
+
+
+@app.post('/api/projects/{pid}/dub',status_code=202)
+def dub_video(pid: str,request: DubRequest):
+    p=_find(pid)
+    _ensure_editable(p)
+    if not p['segments']:
+        raise HTTPException(422,'Cần có phụ đề đã dịch trước khi lồng tiếng.')
+    if request.provider == 'kokoro' and not engines.kokoro_is_ready():
+        raise HTTPException(503,'KokoroTTS chưa chạy trên máy cục bộ.')
+    if request.provider == 'elevenlabs':
+        if not eleven.is_connected()['connected']:
+            raise HTTPException(503,'Chưa liên kết ElevenLabs ở Cài đặt.')
+        try:
+            eleven.free_quota_available(sum(len(s['text']) for s in p['segments']))
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+    _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')
+    jobs.submit(pid,jobs.dubbing,request.voice,request.provider)
+    return {'accepted':True,'project_id':pid}
+
+
+@app.get('/api/projects/{pid}/reference-style')
+def get_reference_style(pid: str):
+    p=_find(pid)
+    if not p.get('video_file'):
+        raise HTTPException(409,'Chưa có video nguồn.')
+    return sample_reference_style(jobs.path_for(pid)/p['video_file'])
+
+
+class GenerateRequest(BaseModel):
+    prompt: str=Field(min_length=12,max_length=1300)
+
+
+@app.post('/api/ai/create-video',status_code=202)
+def ai_create_video(req: GenerateRequest):
+    if not engines.capabilities()['ai_video_local']:
+        raise HTTPException(503,'AI tạo video chưa khả dụng: cần GPU và model local. Không phát sinh phí API.')
+    pid=uuid4().hex
+    db.create(pid,'Video AI: '+req.prompt[:70],source='ai-video',status='queued')
+    jobs.submit(pid,jobs.ai_video,req.prompt)
+    return _shape(_find(pid))
+
+
+@app.get('/api/projects/{pid}/file/{kind}')
+def media_file(pid: str,kind: str):
+    p=_find(pid)
+    available={'source':p['video_file'],'export':p['output_file'],'dub':p.get('dub_file')}
+    if kind not in available:
+        raise HTTPException(404,'Loại tệp không hợp lệ.')
+    name=available[kind]
+    if not name or Path(name).name!=name:
+        raise HTTPException(404,'Không có tệp này.')
+    file=jobs.path_for(pid)/name
+    if not file.is_file():
+        raise HTTPException(404,'Tệp chưa được tạo.')
+    return FileResponse(file,media_type=('audio/wav' if file.suffix=='.wav' else 'video/mp4' if file.suffix=='.mp4' else None),
+                        filename='vietframe-'+kind+file.suffix if kind=='export' else None)
+
+
+@app.get('/api/projects/{pid}/subtitles.srt')
+def download_srt(pid: str):
+    p=_find(pid)
+    text=make_srt(verify_segments(p['segments'],max(p['duration'],1)))
+    return PlainTextResponse(text,media_type='text/plain; charset=utf-8',
+                             headers={'Content-Disposition':'attachment; filename="vietframe.srt"'})
+
+
+def _find(pid):
+    if not re.fullmatch(r'[0-9a-f]{32}',pid):
+        raise HTTPException(404,'Không có dự án này.')
+    p=db.get(pid)
+    if p is None:
+        raise HTTPException(404,'Không tìm thấy dự án.')
+    return p
+
+
+def _claim(pid, status, message):
+    if not db.claim_ready_project(pid,status,message):
+        raise HTTPException(409,'Dự án đang xử lý. Chỉ có thể chạy một tác vụ tại một thời điểm.')
+
+
+@app.post('/api/projects/{pid}/recover')
+def recover(pid: str):
+    p=_find(pid)
+    if p['status'] != 'error' or not p.get('video_file'):
+        raise HTTPException(409,'Chỉ khôi phục được dự án lỗi có video nguồn.')
+    source=config.PROJECTS_DIR / pid / p['video_file']
+    if not source.is_file():
+        raise HTTPException(409,'Video nguồn không còn tồn tại. Hãy nhập lại từ đầu.')
+    if not db.recover_project(pid):
+        raise HTTPException(409,'Dự án đã thay đổi trạng thái; hãy tải lại.')
+    return _shape(_find(pid))
+
+
+def _ensure_editable(p):
+    if p['status']!='ready':
+        raise HTTPException(409,'Dự án đang xử lý hoặc gặp lỗi; hãy kiểm tra trạng thái trước.')
+
+
+def _shape(p):
+    return {**p,'video_url':f'/api/projects/{p["id"]}/file/source' if p['video_file'] else None,
+            'export_url':f'/api/projects/{p["id"]}/file/export?updated={p["updated_at"]}' if p['output_file'] else None,
+            'dub_url':f'/api/projects/{p["id"]}/file/dub' if p.get('dub_file') else None}
+)
     x: int = Field(ge=0, le=98)
     y: int = Field(ge=0, le=98)
     w: int = Field(ge=2, le=100)
