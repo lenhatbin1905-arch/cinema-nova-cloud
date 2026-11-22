@@ -21,13 +21,27 @@ async function initialize() {
     const config = await request('/api/auth/config');
     const googleLink = el('google-login');
     if (config.google_login_available) {
-      googleLink.classList.remove('disabled');
+      googleLink.href = '/api/auth/google/start';
+      googleLink.classList.remove('needs-setup');
       googleLink.removeAttribute('aria-disabled');
       googleLink.removeAttribute('tabindex');
+      el('google-button-label').textContent = 'Tiếp tục bằng Google';
       el('google-help').textContent = 'Dùng tài khoản Google đã được cấp quyền chủ sở hữu.';
+      el('google-setup-guide').classList.add('hidden');
     } else {
-      googleLink.addEventListener('click', e => e.preventDefault());
-      el('google-help').textContent = 'Google chưa được cấu hình: cần Client ID và Client Secret ở Render.';
+      googleLink.href = '#google-setup-guide';
+      googleLink.classList.add('needs-setup');
+      googleLink.removeAttribute('aria-disabled');
+      googleLink.removeAttribute('tabindex');
+      el('google-button-label').textContent = 'Kích hoạt đăng nhập Google';
+      el('google-help').textContent = 'Cần kết nối Google Cloud một lần. Bấm vào đây để xem cách làm.';
+      el('google-setup-guide').classList.remove('hidden');
+      googleLink.addEventListener('click', event => {
+        event.preventDefault();
+        const panel = el('google-setup-guide');
+        panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+        el('google-help').textContent = 'Thiết lập OAuth Client bên Google Cloud và nhập Client ID/Secret vào Render, sau đó tải lại trang.';
+      });
     }
     creatingOwner = config.setup_required;
     if (creatingOwner) {
@@ -47,6 +61,15 @@ async function initialize() {
     }
   } catch(err) { submit.disabled = true; message(err.message); }
 }
+el('copy-google-callback').addEventListener('click', async () => {
+  const callback = 'https://vietframe-studio-app.onrender.com/api/auth/google/callback';
+  try {
+    await navigator.clipboard.writeText(callback);
+    el('google-guide-status').textContent = 'Đã sao chép. Dán vào Google Cloud → Authorized redirect URIs.';
+  } catch {
+    el('google-guide-status').textContent = 'Hãy sao chép thủ công đường dẫn tại ô bên trên.';
+  }
+});
 el('toggle-password').addEventListener('click', () => {
   const shown = el('password').type === 'text';
   el('password').type = shown ? 'password' : 'text';

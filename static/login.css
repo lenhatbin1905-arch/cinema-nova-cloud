@@ -7,3 +7,17 @@
 
 /* Google OpenID Connect — one measured action, no decorative disabled button. */
 .google-section{margin-top:21px}.auth-divider{display:flex;align-items:center;gap:14px;color:#94a095;font-size:10px;font-weight:750;letter-spacing:2px;margin-bottom:19px}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:#dfe5dd;flex:1}.google-button{border:1px solid #dce3dc;background:white;color:#2a3b32;min-height:52px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:14px;font-weight:700;transition:border-color .18s,background .18s}.google-button:hover{border-color:#87a793;background:#fbfcfa}.google-button.disabled{color:#929d95;background:#f8f9f7;border-style:dashed;cursor:not-allowed}.google-button.disabled svg{filter:grayscale(1);opacity:.4}.google-help{font-size:11px;color:#8a948b;line-height:1.65;margin:11px 0 0}
+
+/* Usable Google sign-in setup state, never imply OAuth works without credentials. */
+.google-button.needs-setup{cursor:pointer;background:#fff;border:1px solid #aec8b7;color:#2b5741}
+.google-button.needs-setup:hover{background:#ecf4ed;border-color:#51775d}
+.google-button.needs-setup svg{opacity:1;filter:none}
+.google-guide{margin-top:15px;padding:16px;border:1px solid #d3dfd5;border-radius:9px;background:#f3f7f2;color:#2a4435;font-size:12px;line-height:1.7}
+.google-guide>strong{display:block;font-size:13px;margin-bottom:7px}
+.google-guide ol{padding-left:19px;margin:8px 0}
+.google-guide li{margin:9px 0}
+.google-guide a{color:#275c47;text-decoration:underline;text-underline-offset:2px}
+.google-guide code{font-size:11px;overflow-wrap:anywhere}
+.google-guide input{display:block;width:100%;margin:8px 0 7px;padding:10px;border:1px solid #b8cabb;border-radius:6px;background:white;font-size:11px;color:#273b2e}
+.copy-uri{padding:8px 12px;border:1px solid #9bb6a2;border-radius:6px;background:#fff;color:#27543b;font-weight:700;cursor:pointer}
+.google-guide-status{margin:12px 0 0;color:#536b5b}

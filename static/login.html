@@ -42,11 +42,24 @@
         </form>
         <div class="google-section" aria-label="Đăng nhập Google">
           <div class="auth-divider"><span>HOẶC</span></div>
-          <a href="/api/auth/google/start" id="google-login" class="google-button disabled" aria-disabled="true" tabindex="-1">
+          <a href="#google-setup-guide" id="google-login" class="google-button needs-setup">
             <svg aria-hidden="true" width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.24 5.48-4.73 7.18l7.73 6C44.45 38.01 46.98 31.84 46.98 24.55z"/><path fill="#FBBC05" d="M10.53 28.59A14.39 14.39 0 0 1 9.75 24c0-1.6.27-3.15.76-4.59l-7.98-6.19A23.92 23.92 0 0 0 0 24c0 3.87.92 7.52 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.92-2.13 15.9-5.8l-7.72-6c-2.13 1.44-4.86 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.2C6.51 42.61 14.62 48 24 48z"/></svg>
-            <span>Tiếp tục bằng Google</span>
+            <span id="google-button-label">Đang kiểm tra Google…</span>
           </a>
-          <p class="google-help" id="google-help" aria-live="polite">Chỉ khả dụng sau khi chủ sở hữu liên kết Google OAuth trong Render.</p>
+          <p class="google-help" id="google-help" aria-live="polite">Đang kiểm tra kết nối Google…</p>
+          <section id="google-setup-guide" class="google-guide hidden" aria-label="Cách bật đăng nhập Google">
+            <strong>Cấu hình một lần để đăng nhập Google thật</strong>
+            <ol>
+              <li>Mở <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener noreferrer">Google Cloud → Clients</a> và tạo <b>OAuth Client ID</b>, loại <b>Web application</b>. Thiết lập OAuth consent screen, và thêm tài khoản của bạn vào Test users khi cần.</li>
+              <li>Thêm địa chỉ dưới đây trong <b>Authorized redirect URIs</b>:
+              <input id="google-callback" type="text" readonly value="https://vietframe-studio-app.onrender.com/api/auth/google/callback" aria-label="Google redirect URI">
+              <button id="copy-google-callback" class="copy-uri" type="button">Sao chép đường dẫn</button>
+              </li>
+              <li>Vào <a href="https://dashboard.render.com/web/srv-dc1671t6e07s73cefgb0" target="_blank" rel="noopener noreferrer">Render → VietFrame Studio → Environment</a>, thêm <code>VIETFRAME_GOOGLE_CLIENT_ID</code> và <code>VIETFRAME_GOOGLE_CLIENT_SECRET</code> do Google cấp.</li>
+              <li>Lưu lại, để Render triển khai và tải lại trang. Khi đủ cấu hình, nút sẽ hiện <b>Tiếp tục bằng Google</b>.</li>
+            </ol>
+            <p id="google-guide-status" class="google-guide-status" aria-live="polite">Không gửi Client Secret trong chat, không lưu vào GitHub.</p>
+          </section>
         </div>
         <div class="security-note"><span class="lock-icon" aria-hidden="true">▣</span><p>Mật khẩu được bảo vệ bằng thuật toán băm. Studio không yêu cầu dịch vụ đăng nhập trả phí.</p></div>
         <p class="bottom-note">© VietFrame Studio · Một không gian riêng, chỉ dành cho bạn.</p>
