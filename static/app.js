@@ -196,6 +196,7 @@ function showProject(p) {
   $('#show-source').classList.toggle('active',!playingExport);
   $('#show-export').classList.toggle('active',playingExport);
   $('#recover-current').classList.toggle('hidden',p?.status!=='error' || !p?.video_url);
+  $('#recover-current').textContent=/Câu \d+ cần tăng tốc/.test(p?.message||'') ? '↻ Khôi phục để sửa câu thoại dài' : 'Khôi phục lỗi';
   $('#retry-gemini-button').classList.toggle('hidden',
     !(p?.status==='error'&&p?.video_url&&/Gemini|Google.*(503|502|504)|quá tải/i.test(p?.message||'')));
   const canRetryOriginal=!!p?.video_url && p?.status==='error' &&
@@ -213,8 +214,9 @@ function showProject(p) {
   if (p?.dub_url) $('#dub-preview').src=p.dub_url;
   if (p?.export_url) $('#download-export').href=p.export_url;
   if (p?.id) $('#download-srt').href=`/api/projects/${p.id}/subtitles.srt`;
-  $('#voice-report').classList.toggle('hidden',!p?.dub_file);
-  if(p?.dub_file) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
+  const timingReportAvailable=!!p?.dub_file || (p?.status==='error' && /Câu \d+ cần tăng tốc/.test(p.message||''));
+  $('#voice-report').classList.toggle('hidden',!timingReportAvailable);
+  if(timingReportAvailable) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
   const editable=p?.status==='ready';
   $('#gemini-prerequisite').classList.toggle('hidden',!!p?.video_url);
   ['render-button','complete-video-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
@@ -546,6 +548,10 @@ async function refreshCurrent(){
       ['render-button','complete-video-button','save-segments','transcribe','translate','add-segment']
         .forEach(id=>{document.getElementById(id).disabled=!editable;});
       $('#recover-current').classList.toggle('hidden',p.status!=='error'||!p.video_url);
+      $('#recover-current').textContent=/Câu \d+ cần tăng tốc/.test(p.message||'') ? '↻ Khôi phục để sửa câu thoại dài' : 'Khôi phục lỗi';
+      const hasReport=!!p.dub_file||(p.status==='error' && /Câu \d+ cần tăng tốc/.test(p.message||''));
+      $('#voice-report').classList.toggle('hidden',!hasReport);
+      if(hasReport) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
       $('#retry-gemini-button').classList.toggle('hidden',
         !(p.status==='error'&&p.video_url&&/Gemini|Google.*(503|502|504)|quá tải/i.test(p.message||'')));
       text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';renderJobProgress(p);$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
@@ -622,8 +628,15 @@ function init(){
   $('#show-export').addEventListener('click',()=>{if(state.selected?.export_url){state.preview='export';showProject(state.selected);}});
   $('#recover-current').addEventListener('click',async()=>{
     try{if(!state.selected)throw new Error('Chưa chọn dự án.');
+      const match=(state.selected.message||'').match(/Câu (\d+) cần tăng tốc/);
+      const failedIndex=match ? Number(match[1])-1 : -1;
       const p=await apiPost('/api/projects/'+state.selected.id+'/recover',{});
-      state.selected=p;showProject(p);toast('Đã khôi phục dự án.');await loadProjects();
+      state.selected=p;showProject(p);await loadProjects();
+      if(failedIndex>=0){
+        const field=$('#segments .segment-card .segment-voice-text')[failedIndex];
+        if(field){field.scrollIntoView({behavior:'smooth',block:'center'});field.focus({preventScroll:true});}
+        toast('Đã giữ nguyên video và phụ đề. Chỉnh riêng lời thoại câu '+(failedIndex+1)+' rồi tạo lại.');
+      }else toast('Đã khôi phục dự án.');
     }catch(e){showError(e);}
   });
   $('#add-segment').addEventListener('click',()=>addSegment({start: Math.max(0,(state.selected?.duration||5)-3),end:state.selected?.duration||5,text:''}));
