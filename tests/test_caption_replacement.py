@@ -131,3 +131,30 @@ def test_processing_large_videos_respects_free_server_memory():
     assert limited_video_dimensions(1080,1920,0)==(1080,1920)
     assert limited_video_dimensions(320,570,1280)==(320,570)
     assert all(v%2==0 for v in limited_video_dimensions(1080,1920,1280))
+
+
+
+def test_render_large_vertical_video_to_safe_mp4_dimensions(tmp_path, monkeypatch):
+    import json
+    import subprocess
+    from app.media import ffmpeg_render
+    monkeypatch.setenv('VIETFRAME_MAX_VIDEO_EDGE','1280')
+    source=tmp_path/'source.mp4'
+    ass=tmp_path/'subtitles.ass'
+    result=tmp_path/'export.mp4'
+    proc=subprocess.run([
+        'ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
+        '-f','lavfi','-i','color=c=0x2e5641:s=1080x1920:r=2:d=0.60',
+        '-an','-threads','1','-c:v','libx264','-pix_fmt','yuv420p',str(source)
+    ],capture_output=True,text=True,timeout=90)
+    assert proc.returncode==0,proc.stderr
+    ass.write_text(subtitles.make_ass(
+        [{'start':.05,'end':.45,'text':'Xin chào'}],
+        {'font':'DejaVu Sans'},resolution=(1080,1920)),encoding='utf-8')
+    ffmpeg_render(source,ass,result)
+    meta=subprocess.run(['ffprobe','-v','error',
+        '-show_entries','stream=width,height','-select_streams','v:0',
+        '-of','json',str(result)],capture_output=True,text=True,timeout=30)
+    assert meta.returncode==0,meta.stderr
+    frame=json.loads(meta.stdout)['streams'][0]
+    assert (frame['width'],frame['height'])==(720,1280)
