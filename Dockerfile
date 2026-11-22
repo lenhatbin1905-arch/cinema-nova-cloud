@@ -6,6 +6,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY static ./static
 ENV VIETFRAME_DATA=/data VIETFRAME_HOST=0.0.0.0 VIETFRAME_PORT=8010
-EXPOSE 8010
-# Local/dev binding only. Expose behind authenticated reverse proxy in production.
-CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8010"]
+EXPOSE 10000
+# Render auto-configures PORT; startup rejects any unauthenticated media API request.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
