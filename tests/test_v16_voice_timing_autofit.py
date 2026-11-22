@@ -113,7 +113,7 @@ def test_260_percent_speech_uses_chained_atempo_without_failure(client,monkeypat
 
 def test_truly_impossible_speech_reports_editable_text_instead_of_truncating(client,monkeypatch):
     pid=_new_project(client)
-    _mock_tts(monkeypatch,3.75)
+    _mock_tts(monkeypatch,12.0)
     with pytest.raises(RuntimeError,match='rút gọn riêng ô'):
         jobs.dubbing(pid,'voice01',provider='elevenlabs')
     # Keep captions/source and a concrete report so the user can edit only speech.
@@ -152,3 +152,27 @@ def test_changing_voice_or_text_invalidates_tts_cache(client,monkeypatch):
     jobs.dubbing(pid,'voice02',provider='elevenlabs')
     assert len(produced)==2, 'A different voice must create different audio'
     assert produced[0][1]=='voice01' and produced[1][1]=='voice02'
+
+
+def test_overlong_speech_borrows_only_safe_gap_and_completes_mp4(client,monkeypatch):
+    pid=_new_project(client)
+    produced,_=_mock_tts(monkeypatch,3.75)
+    jobs.complete_video(pid,{'font':'DejaVu Sans'},'elevenlabs','voice01',{})
+    assert len(produced)==1
+    project=client.get(f'/api/projects/{pid}').json()
+    assert project['output_file']=='export.mp4'
+    report=client.get(f'/api/projects/{pid}/voice-timing-report').json()
+    assert report['all_within_limit'] is True
+    assert report['segments'][0]['borrowed_gap_seconds'] > 0
+    assert report['segments'][0]['speed_factor'] <= jobs.MAX_AUTO_TEMPO
+    assert project['segments'][0]['text']=='Đây là phụ đề tiếng Việt không bị xóa.'
+
+
+def test_gap_never_steals_next_cue_or_exceeds_video_boundary():
+    segments=[{'start':0.1,'end':0.4,'text':'Một'},
+              {'start':0.8,'end':1.5,'text':'Hai'}]
+    assert jobs.available_speech_window(segments,0,2.0) <= 0.75 + 1e-6
+    assert jobs.available_speech_window(segments,1,2.0) <= 1.95 + 1e-6
+    no_gap=[{'start':0,'end':1,'text':'Một'},
+            {'start':1,'end':2,'text':'Hai'}]
+    assert jobs.available_speech_window(no_gap,0,2.0)==1.0
