@@ -25,6 +25,9 @@ def validate_regions(regions):
             raise ValueError('Vùng che quá lớn. Hãy chọn sát từng dòng chữ, không che thành dải ngang.')
         method=reg.get('method','glyph')
         if method not in ('glyph','edge'):raise ValueError('Phương pháp che không hợp lệ.')
+        purpose=reg.get('purpose','cleanup')
+        if purpose not in ('cleanup','subtitle','logo'):
+            raise ValueError('Mục đích vùng xử lý không hợp lệ.')
         start=reg.get('start',None);end=reg.get('end',None)
         if (start is None)!=(end is None):raise ValueError('Phải có cả thời điểm bắt đầu và kết thúc.')
         if start is not None:
@@ -33,6 +36,9 @@ def validate_regions(regions):
             if not (math.isfinite(start) and math.isfinite(end) and 0<=start<end<=1800):
                 raise ValueError('Thời gian phải hợp lệ và kết thúc sau bắt đầu.')
         normalized=dict(x=x,y=y,w=w,h=h,method=method)
+        # Preserve old regions verbatim for existing projects; only explicit
+        # subtitle regions are valid anchors for replacement Vietnamese text.
+        if purpose!='cleanup': normalized['purpose']=purpose
         if start is not None:normalized.update(start=round(start,3),end=round(end,3))
         out.append(normalized)
     return out
