@@ -56,11 +56,20 @@ async def security_and_auth(request: Request, call_next):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    local_ai_tool = path.startswith('/static/gwr/')
+    scripts = "'self' 'wasm-unsafe-eval'" if local_ai_tool else "'self'"
     response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        f"default-src 'self'; script-src {scripts}; style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+        "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+        "frame-ancestors 'none'; form-action 'self'"
     )
+    if local_ai_tool:
+        # Required for cross-origin isolated WebCodecs/ONNX processing.
+        # Models are served only from our own origin; no video uploads.
+        response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+        response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+        response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
     response.headers['Cache-Control'] = 'no-store' if path.startswith('/api/') or path in {'/', '/login'} else 'no-cache'
     return response
 
