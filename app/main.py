@@ -509,7 +509,7 @@ def gemini_status():
 
 class GeminiLinkRequest(BaseModel):
     api_key: str = Field(min_length=16, max_length=256)
-    model: str = Field(default='gemini-3.5-flash-lite', pattern=r'^gemini-3\.(?:5-flash-lite|8-flash)
+    model: str = Field(default='gemini-3.5-flash-lite', pattern=r'^gemini-3\.(?:5-flash-lite|8-flash)$')
 
 
 @app.post('/api/integrations/gemini/link')
