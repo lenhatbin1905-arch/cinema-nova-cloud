@@ -2,7 +2,7 @@
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
-> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Đã có trang đăng nhập, tài khoản chủ sở hữu duy nhất và bảo vệ API bằng cookie phiên + CSRF. Chưa có quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa chữ bằng AI theo chuyển động. Bản này có FFmpeg delogo theo vùng cố định và kết nối ElevenLabs bằng API key được mã hóa.
+> Đã bổ sung kiểm soát tác vụ, khôi phục khi gián đoạn, chống phụ đề lỗi và xem trước gốc/bản xuất. Trạng thái hiện tại: **MVP đang phát triển**, chưa phải website thương mại hoàn chỉnh. Đã có trang đăng nhập, tài khoản chủ sở hữu duy nhất và bảo vệ API bằng cookie phiên + CSRF. Chưa có quản lý nhiều người dùng, hóa đơn, tự gán font gốc 1:1 hay xóa chữ bằng AI theo chuyển động. Bản này có xóa phụ đề sát nét chữ trắng/vàng theo thời điểm bằng OpenCV và chế độ FFmpeg delogo cho logo nhỏ, cùng kết nối ElevenLabs bằng API key được mã hóa. Không bảo đảm xóa không dấu vết trên mọi hậu cảnh.
 
 ## Có thể dùng ngay khi cài đủ thành phần
 
@@ -56,15 +56,15 @@ pip install -r requirements-ai.txt
 
 **TTS giọng Việt:** có pipeline thực tế cho KokoroTTS OpenAI-compatible local server (POST `/v1/audio/speech`): tổng hợp từng câu, căn thời gian, ghép thành `dub.wav`, và thay âm thanh video khi xuất MP4. Chưa kiểm thử chất lượng giọng trên model được cài thực tế, chưa có lip-sync, chưa tách nhạc và thoại gốc, chưa phân biệt nhiều người nói. Cần bật KokoroTTS riêng, đặt `KOKORO_TTS_URL=http://127.0.0.1:7860` (trong Docker Compose dùng địa chỉ dịch vụ nội bộ); nguồn hướng dẫn: https://hangry-labs.github.io/kokoroTTS/docs/dockerhub.html. Giọng Việt thuộc pack riêng; chọn voice id từ `/tts/voices`. Không khai báo ElevenLabs miễn phí vĩnh viễn.
 
-## Làm sạch phụ đề không che cả nửa màn hình (v0.6)
+## Xóa đúng nét chữ thay vì làm mờ cả dải (v0.6)
 
-- Chế độ **Xóa theo nét chữ**: OpenCV xác định cụm pixel trắng/vàng ở khung chữ nhỏ, lấy thêm viền, rồi phục hồi bằng inpainting Telea. Không tô mờ cả khung chữ nhật.
-- Chế độ **Nội suy cạnh**: FFmpeg delogo, chỉ dành cho logo nhỏ/nền đơn giản.
-- Vùng chữ có thời điểm bắt đầu và kết thúc, tối đa 80 vùng; mỗi vùng bị giới hạn 9% diện tích video và 12% chiều cao.
-- Chèn lại phụ đề Việt bằng ASS, trắng viền đen, dùng dấu `[[từ cần nhấn]]` để tô vàng. Có preset phong cách gần giống video mẫu, **không khẳng định đã nhận diện font chính xác**.
-- Nếu không phát hiện chữ trong vùng xử lý, hệ thống báo lỗi thay vì báo xóa thành công. Nền phức tạp có thể còn vết; chưa có OCR tracking và temporal diffusion.
-- QA: 63/63 kiểm thử PASS tại môi trường phát triển; video 4 giây dựng tổng hợp để đối chiếu; link TikTok gốc chưa thể lấy về; mẫu MP4 đã bị nhòe sẵn không khôi phục được thông tin đã mất. Xem `docs/QA_v06.md`.
-- Không gọi API trả phí; ElevenLabs vẫn cần liên kết riêng và quota Free nếu có.
+- Tối đa 80 vùng theo thời gian với vị trí `% x/y/w/h`, `start`, `end`, `method` (`glyph` hoặc `edge`).
+- Giới hạn cứng mỗi vùng: **không quá 9% tổng diện tích hoặc 12% chiều cao**. Bộ preset che 88% chiều ngang và 17% chiều cao của bản cũ bị loại bỏ.
+- `glyph`: OpenCV chỉ tìm cụm pixel sáng trắng/vàng trong khu vực nhỏ, lấy thêm viền đậm lân cận rồi inpaint bằng Telea. Những pixel bên ngoài vùng chọn và ngoài thời gian chọn không bị sửa trong bước làm sạch. Nếu toàn clip không phát hiện chữ cần xóa, **render trả lỗi thay vì giả thành công**.
+- `edge`: FFmpeg delogo nhỏ, có thời điểm bắt đầu/kết thúc, chỉ dùng trên nền đơn giản/đối tượng nhỏ.
+- Video đã có **vệt mờ do công cụ khác tạo sẵn** không thể bảo đảm phục hồi toàn bộ hậu cảnh. Xử lý tóc, mặt và nền chuyển động nhanh có thể để lại dấu vết; đây chưa phải tracking/inpainting thời gian bằng model AI cao cấp.
+- Hệ chữ ASS hỗ trợ tô từ nhấn vàng bằng `[[từ cần nhấn]]` trong câu, và có preset chữ trắng đậm viền đen theo phong cách hình mẫu; vẫn cần video gốc để kiểm tra font thật sự.
+- Video QA `demo/original_reference_v06.mp4` và `demo/precision_clean_subtitle_v06.mp4` được dựng giả lập để kiểm thử, **không phải video TikTok gốc**. File này không đưa vào git để tránh làm repository phình to.
 
 ## Font giống video gốc
 
@@ -134,3 +134,15 @@ Bảo mật: lưu key Fernet mã hóa trong SQLite; key mã hóa đặt trên vo
 Endpoints mới: `PUT /api/projects/{id}/cleanup`, `GET /api/integrations/elevenlabs`, `POST /api/integrations/elevenlabs/link`, `DELETE /api/integrations/elevenlabs`, `GET /api/integrations/elevenlabs/voices`. `POST /api/projects/{id}/dub` nhận thêm `provider: kokoro | elevenlabs`.
 
 Vẫn chạy local-only. Trước khi mở website trên Internet cần kiểm tra HTTPS, reverse proxy và cấu hình session/secret theo môi trường triển khai.
+
+## Gemini viết phụ đề và thoại ElevenLabs (v0.8)
+
+VietFrame Studio v0.8 bổ sung `app/gemini_bridge.py`, dùng REST API Gemini Files API + `generateContent` thay vì phải cài SDK Google. **Không cần key khi chỉ chạy phần phụ đề thường.** Người dùng liên kết Gemini trong **Cài đặt** bằng khóa Google AI Studio, liên kết ElevenLabs riêng bằng khóa ElevenLabs. Cả hai được mã hóa trong database cục bộ, không đưa vào mã nguồn/Git và không hiển thị lại qua API.
+
+Luồng đầy đủ: mở dự án video → chọn nút **Gemini xem video → Viết sub & lời thoại Việt** → xác nhận truyền video cho Gemini → đọc kết quả phụ đề/thoại cho từng nhân vật → chọn ElevenLabs, giọng mặc định và giọng riêng `spk1`, `spk2`... nếu cần → **Tạo video hoàn chỉnh**. Gemini đưa ra `source_text`, `text` (để hiển thị), `voice_text` (để ElevenLabs đọc), `speaker`, `start`/`end` và cờ `needs_review` nếu thiếu chắc chắn. Có thể chỉnh riêng `voice_text` để lời nói vừa thời lượng cảnh mà không làm đổi phụ đề hiển thị.
+
+Trong luồng tạo giọng, VietFrame đo WAV/MP3 thật bằng FFprobe, đặt vào mốc bắt đầu của câu, tăng tốc tối đa 1.35 lần, thêm khoảng lặng ngắn nếu cần. Nếu câu quá dài, tác vụ **dừng và báo lỗi**, không cắt cụt nội dung/âm thầm xuất video sai. Kết quả có `/api/projects/{id}/voice-timing-report` mô tả từng câu. **Đây là khớp timeline âm thanh, không phải lip-sync chuyển động miệng.**
+
+Gemini phân tích video có âm thanh nguồn, tối đa **180 giây/60 MB** mỗi lượt. Các timecode Gemini vẫn là suy đoán cần người dùng xem lại, nhất là cảnh nhiều người nói/nhạc lớn. Khi chưa có lời nói nghe rõ, hệ thống không bịa phụ đề. File upload gửi Google được yêu cầu xóa ở khối `finally`. Chỉ dùng API key Free-tier của dự án *không bật billing*, vì API key tự nó không chứng minh rằng billing đã tắt; người dùng chịu trách nhiệm kiểm tra gói trong Google AI Studio. ElevenLabs vẫn được giới hạn bởi quota API Free, không được hứa miễn phí vô hạn.
+
+Trạng thái hiện tại: **mã nguồn + kiểm thử cục bộ**, chưa xác minh request API Gemini hoặc chất lượng giọng ElevenLabs thật vì chưa có khóa của chủ sở hữu; bản xem trước *tĩnh* trên `vietframe-studio-eghb.onrender.com` không chạy backend này. Trước khi dùng trực tuyến cần dịch vụ backend có bảo mật và lưu trữ dữ liệu bền vững.

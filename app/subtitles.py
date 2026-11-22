@@ -26,7 +26,21 @@ def verify_segments(segments, max_duration=3600):
             raise ValueError('Thời gian câu phụ đề không hợp lệ.')
         if not text or len(text) > 500:
             raise ValueError('Mỗi câu phải có từ 1 đến 500 ký tự.')
-        valid.append({'start':start,'end':end,'text':text})
+        safe={'start':start,'end':end,'text':text}
+        if isinstance(item.get('voice_text'), str) and item['voice_text'].strip():
+            spoken=item['voice_text'].replace('\r','').replace('\x00','').strip()
+            if len(spoken)>500:raise ValueError('Câu dùng cho giọng đọc vượt quá 500 ký tự.')
+            safe['voice_text']=spoken
+        if isinstance(item.get('source_text'), str):
+            safe['source_text']=item['source_text'][:500]
+        if item.get('speaker') is not None:
+            speaker=str(item['speaker'])
+            if not re.fullmatch(r'spk\d{1,2}', speaker):
+                raise ValueError('ID nhân vật không hợp lệ.')
+            safe['speaker']=speaker
+        if item.get('needs_review') is not None:
+            safe['needs_review']=bool(item['needs_review'])
+        valid.append(safe)
     return sorted(valid, key=lambda x: (x['start'],x['end']))
 
 
@@ -84,7 +98,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Escape ASS override syntax, so foreign subtitles cannot inject styling commands.
         safe = s['text'].replace('\\', '＼').replace('{','｛').replace('}','｝')
         safe = safe.replace('\r',' ').replace('\n','\\N')
-        # Safe [[emphasis]] markers become yellow foreground ASS tags.
+        # [[từ nhấn]] uses only safe ASS foreground color tags. Other user braces remain escaped.
         safe = re.sub(r'\[\[([^\[\]\n]{1,80})\]\]',
                       lambda m: '{\\1c' + highlight_color + '}' + m.group(1) + '{\\1c' + color + '}', safe)
         rows.append(f'Dialogue: 0,{time_ass(s["start"])},{time_ass(s["end"])},Main,,0,0,0,,{safe}')

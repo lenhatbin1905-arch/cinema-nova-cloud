@@ -24,6 +24,8 @@ def capabilities():
         'offline_translation': available('argostranslate'),
         'tts_kokoro_local': kokoro_is_ready(),
         'elevenlabs_link_supported': True,
+        'gemini_video_script_supported': True,
+        'gemini_video_script_connected': __import__('app.gemini_bridge',fromlist=['status']).status()['connected'],
         'static_text_cleanup': True,
         'ai_video_local': bool(config.ENABLE_LOCAL_VIDEO_GEN and gpu and available('diffusers')),
         'gpu': gpu,

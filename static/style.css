@@ -10,6 +10,7 @@
 .video-source-switch button{padding:7px 12px;font-size:12px}
 .video-source-switch button.active{background:#315b4e;color:white;border-color:#315b4e}
 .video-source-switch button:disabled{opacity:.5;cursor:not-allowed}
+.voice-line-label,.voice-speaker-label{display:block;margin-top:8px;font-size:12px;color:#526264;font-weight:600}.voice-line-label textarea{display:block;width:100%;margin-top:5px;resize:vertical;min-height:48px;padding:8px;border:1px solid #d3dcdb;border-radius:6px;font-weight:normal}.voice-speaker-label input{display:block;width:105px;margin-top:5px;padding:7px;border:1px solid #d3dcdb;border-radius:6px}.source-line{display:block;color:#7d888b;margin:6px 0}.review-flag{color:#8f6817;background:#fff7d8;padding:5px 8px;display:inline-block;border-radius:5px}.speaker-voices{display:grid;gap:8px;margin-top:12px}.speaker-voices label{font-size:12px;color:#536262}.speaker-voices select{margin-left:8px;max-width:230px}.control-gemini{margin-bottom:12px}@media(max-width:640px){.speaker-voices select{max-width:180px}}
 .screen{position:relative}
 #caption-overlay{position:absolute;left:5%;right:5%;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.24;pointer-events:none;z-index:3;letter-spacing:0;max-height:45%;overflow:hidden}
 #caption-overlay:empty{display:none}
@@ -38,8 +39,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* VietFrame v0.5: quiet, utility-first media tools */
 .cleanup-list{display:grid;gap:6px}.cleanup-row{padding:9px 11px;border:1px solid #e1e8dc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#526455;font-size:12px}.voice-row{flex-wrap:wrap}.voice-row select{max-width:100%;min-width:130px}.account-panel input[type=password]{max-width:100%;width:100%;padding:11px;border:1px solid #dfe5dd;border-radius:7px;margin:8px 0 13px}.account-panel a{text-decoration:underline;color:#315b4e}
 
+.editor-actions{flex-wrap:wrap}.editor-actions #complete-video-button{background:#2c5b49;border:1px solid #264d3e;box-shadow:0 3px 9px #152b1c1c;font-weight:800}.editor-actions #complete-video-button:not(:disabled):hover{background:#1c4536}.editor-actions #complete-video-button:disabled{opacity:.55}#link-detect{margin-top:8px;font-weight:600;color:#476456}@media(max-width:760px){.editor-actions #complete-video-button{flex-basis:100%;min-height:45px}}
 .screen{position:relative}#cleanup-overlay{position:absolute;display:none;border:2px dashed #e6d092;background:#e6d09227;pointer-events:none;z-index:3;box-shadow:0 0 0 1px #1f241f55 inset}#caption-overlay{z-index:2}
 
-/* v0.6: a search outline is NOT an opaque or blurred rectangle. */
+/* v0.6: guides indicate search bounds only; no solid half-screen masking. */
 #cleanup-overlay{position:absolute;display:block;inset:0;background:transparent;box-shadow:none;border:0;pointer-events:none;z-index:3}
 #cleanup-overlay .cleanup-region{position:absolute;border:1.5px dashed #ffe4a6;background:#ffe4a60a;box-shadow:0 0 0 1px #0b1e1455 inset}

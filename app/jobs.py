@@ -8,9 +8,9 @@ from pathlib import Path
 from . import config, db
 from .media import probe, ffmpeg_render
 from .subtitles import make_ass, make_srt, verify_segments
-from . import engines, elevenlabs_bridge as eleven
+from . import engines, elevenlabs_bridge as eleven, gemini_bridge as gemini
 
-executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='vietframe-media')
+executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='vietframe-media')
 logger = logging.getLogger('vietframe.jobs')
 
 
@@ -90,7 +90,22 @@ def translation(pid, source_language, target_language):
               message='Đã dịch. Hãy kiểm tra từ ngữ và font trước khi xuất.')
 
 
-def render(pid, style):
+def gemini_script(pid):
+    data=db.get(pid)
+    if not data or not data['video_file']:
+        raise RuntimeError('Thiếu video nguồn cần Gemini phân tích.')
+    source=path_for(pid)/data['video_file']
+    db.update(pid,status='analyzing',progress=10,message='Gemini đang nghe lời gốc và đối chiếu hình ảnh…')
+    report=gemini.analyze_video(source, data['duration'])
+    if not report['segments']:
+        raise RuntimeError('Không phát hiện lời nói rõ trong video; không tự tạo phụ đề giả.')
+    (path_for(pid)/'gemini-script-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+    db.update(pid,segments_json=json.dumps(report['segments'],ensure_ascii=False),
+        dub_file=None,output_file=None,status='ready',progress=100,
+        message=f'Gemini đề xuất {len(report["segments"])} câu, {report["review_count"]} câu cần soát. Hãy kiểm tra trước khi dùng ElevenLabs.')
+
+
+def render(pid, style, *, use_dub=True, one_click=False):
     data=db.get(pid)
     if not data or not data['video_file']:
         raise ValueError('Thiếu video nguồn.')
@@ -106,8 +121,8 @@ def render(pid, style):
     ass.write_text(make_ass(segments,style,resolution=resolution),encoding='utf-8-sig')
     (folder/'subtitles.srt').write_text(make_srt(segments),encoding='utf-8-sig')
     output=folder/'export.mp4'
-    db.update(pid,status='rendering',progress=10,message='FFmpeg đang xuất MP4, vui lòng giữ ứng dụng chạy…')
-    dubbed = (folder/data['dub_file']) if data.get('dub_file') else None
+    db.update(pid,status='rendering',progress=92 if one_click else 10,message='FFmpeg đang ghép chữ, hình và âm thanh thành MP4…')
+    dubbed = (folder/data['dub_file']) if use_dub and data.get('dub_file') else None
     ffmpeg_render(source,ass,output,audio=dubbed,regions=data.get('cleanup_regions', []))
     probe(output)
     db.update(pid,output_file=output.name,status='ready',progress=100,
@@ -122,7 +137,7 @@ def ai_video(pid,prompt):
     finish_video(pid,output)
 
 
-def dubbing(pid, voice, provider='kokoro'):
+def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     project=db.get(pid)
     if not project or not project['video_file'] or not project['segments']:
         raise ValueError('Cần có video và phụ đề đã dịch trước khi lồng tiếng.')
@@ -134,28 +149,37 @@ def dubbing(pid, voice, provider='kokoro'):
     if len(segments)>80:
         raise RuntimeError('Lồng tiếng bản đầu tối đa 80 câu mỗi video.')
     if provider == 'elevenlabs':
-        eleven.free_quota_available(sum(len(s['text']) for s in segments))
+        eleven.free_quota_available(sum(len(s.get('voice_text') or s['text']) for s in segments))
+    voice_map=voice_map or {}
     folder=path_for(pid)
     prepared=[]
+    timing_report=[]
     db.update(pid,status='dubbing',progress=5,message='Đang tạo giọng Việt bằng '+provider+'…')
     for index,seg in enumerate(segments):
         raw=folder / (f'voice-{index:03}.wav' if provider == 'kokoro' else f'voice-{index:03}.mp3')
         processed=folder/f'voice-align-{index:03}.wav'
+        speak=seg.get('voice_text') or seg['text']
+        chosen_voice=voice_map.get(seg.get('speaker','spk1'),voice)
         if provider == 'elevenlabs':
-            eleven.synthesize(seg['text'], voice, raw)
+            eleven.synthesize(speak, chosen_voice, raw)
         else:
-            engines.kokoro_synthesize(seg['text'],voice,raw)
+            engines.kokoro_synthesize(speak,chosen_voice,raw)
         # Each utterance is placed on its own fixed timeline; fail on extreme speed-up
         # instead of cropping the end of a sentence silently.
         from subprocess import run
         duration_result=run(['ffprobe','-v','error','-show_entries','format=duration',
                              '-of','default=nk=1:nw=1',str(raw)],capture_output=True,text=True,timeout=25)
         if duration_result.returncode:
-            raise RuntimeError('KokoroTTS trả âm thanh không đọc được.')
+            raise RuntimeError('Giọng TTS trả âm thanh không đọc được.')
         sound_duration=float(duration_result.stdout.strip())
         slot=seg['end']-seg['start']
         rate=max(1.0,sound_duration/slot)
+        timing_report.append({'index':index+1,'speaker':seg.get('speaker','spk1'),
+            'start':seg['start'],'end':seg['end'],'voice_id':chosen_voice,
+            'slot_seconds':round(slot,3),'raw_audio_seconds':round(sound_duration,3),
+            'speed_factor':round(rate,3),'speech_text':speak,'timing_ok':rate<=1.35})
         if rate>1.35:
+            (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
             raise RuntimeError(f'Câu {index+1} dài quá thời gian cho phép ({rate:.2f}x). Hãy rút ngắn câu dịch hoặc tăng thời lượng đoạn.')
         start_ms=round(seg['start']*1000)
         filter=f'atempo={rate:.5f},apad,atrim=duration={slot:.3f},adelay={start_ms}|{start_ms}'
@@ -179,7 +203,22 @@ def dubbing(pid, voice, provider='kokoro'):
     result=subprocess.run(command,capture_output=True,text=True,timeout=600)
     if result.returncode or not combined.exists():
         raise RuntimeError('Ghép giọng thất bại: '+result.stderr[-300:])
+    (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
     for file in list(folder.glob('voice-*.wav'))+list(folder.glob('voice-align-*.wav'))+list(folder.glob('voice-*.mp3')):
         file.unlink(missing_ok=True)
-    db.update(pid,dub_file='dub.wav',output_file=None,status='ready',progress=100,
-              message='Đã lồng tiếng cục bộ. Xuất MP4 để ghép giọng với hình.')
+    db.update(pid,dub_file='dub.wav',output_file=None,status='rendering' if one_click else 'ready',progress=90 if one_click else 100,
+              message='Đã đồng bộ giọng theo câu, đang xuất MP4…' if one_click else 'Đã lồng tiếng xong. Xuất MP4 để ghép giọng với hình.')
+
+
+def complete_video(pid, style, voice_provider='original', voice=None, voice_map=None):
+    """One queued project job: optional timed TTS -> precise cleanup -> caption render -> MP4.
+
+    No synthetic success, silent voice fallback, or extra paid API calls.
+    """
+    if voice_provider == 'original':
+        render(pid, style, use_dub=False, one_click=True)
+        return
+    if voice_provider not in {'kokoro','elevenlabs'} or not voice:
+        raise ValueError('Chưa chọn giọng hợp lệ để lồng tiếng.')
+    dubbing(pid, voice, voice_provider, one_click=True, voice_map=voice_map)
+    render(pid, style, use_dub=True, one_click=True)

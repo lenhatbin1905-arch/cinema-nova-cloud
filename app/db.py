@@ -79,7 +79,7 @@ def claim_ready_project(project_id, status, message):
     """Atomically claim a job. Two rapid clicks cannot start competing renders."""
     with _connect() as con:
         row = con.execute(
-            "UPDATE projects SET status=?, progress=1, message=?, output_file=CASE WHEN ?='rendering' THEN NULL ELSE output_file END, updated_at=? "
+            "UPDATE projects SET status=?, progress=1, message=?, output_file=CASE WHEN ? IN ('rendering','finishing') THEN NULL ELSE output_file END, updated_at=? "
             "WHERE id=? AND status='ready' RETURNING id",
             (status, message, status, now(), project_id),
         ).fetchone()
@@ -120,7 +120,7 @@ def mark_interrupted_jobs():
     with _connect() as con:
         con.execute("UPDATE projects SET status='error', progress=0, "
                     "message='Tác vụ bị gián đoạn do máy chủ khởi động lại. Có thể khôi phục dự án nếu video nguồn còn.', "
-                    "updated_at=? WHERE status IN ('queued','downloading','transcribing','translating','rendering','dubbing','generating')",
+                    "updated_at=? WHERE status IN ('queued','downloading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing')",
                     (now(),))
 
 

@@ -3,8 +3,8 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 const state = { csrf: '', accountEmail: '', projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source', cleanupDraft: [], elevenlabsConnected: false };
-const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
-const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating'];
+const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', finishing: 'Đang tạo video hoàn chỉnh', analyzing: 'Gemini đang phân tích video', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
+const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing'];
 
 function toast(message, error=false) {
   const el = $('#toast'); el.textContent = message; el.className = error ? 'visible error' : 'visible';
@@ -42,7 +42,7 @@ function switchView(view) {
   $(`#view-${view}`).classList.remove('hidden');
   $$('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.view === view));
   text($('#breadcrumb-view'), ({ projects:'Tổng quan', editor:'Biên tập phụ đề', ai:'Tạo video AI', settings:'Hệ thống' })[view]);
-  if (view === 'settings') { loadCapabilities(); loadElevenStatus(); }
+  if (view === 'settings') { loadCapabilities(); loadElevenStatus(); loadGeminiStatus(); }
 }
 function showError(error) { toast(error?.message || 'Có lỗi chưa xác định.', true); }
 function consent() { if (!$('#license-ok').checked) throw new Error('Bạn cần xác nhận quyền sử dụng video.'); }
@@ -115,14 +115,7 @@ function updateCaptionOverlay(){
   overlay.style.color=style.color;
   overlay.style.webkitTextStroke=Math.min(7,style.outline*scale)+'px '+style.outline_color;
   overlay.style.paintOrder='stroke fill';
-  overlay.replaceChildren();
-  const parts=String(active.text).split(/(\[\[[^\[\]\n]{1,80}\]\])/g);
-  for(const part of parts){
-    if(part.startsWith('[[')&&part.endsWith(']]')){
-      const highlight=document.createElement('span');highlight.style.color=style.highlight_color;
-      highlight.textContent=part.slice(2,-2);overlay.append(highlight);
-    }else overlay.append(document.createTextNode(part));
-  }
+  overlay.textContent=active.text;
 }
 
 function showProject(p) {
@@ -146,32 +139,50 @@ function showProject(p) {
   if (p?.dub_url) $('#dub-preview').src=p.dub_url;
   if (p?.export_url) $('#download-export').href=p.export_url;
   if (p?.id) $('#download-srt').href=`/api/projects/${p.id}/subtitles.srt`;
+  $('#voice-report').classList.toggle('hidden',!p?.dub_file);
+  if(p?.dub_file) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
   const editable=p?.status==='ready';
-  ['render-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
-  $('#dub-button').disabled=!editable||!$('#dub-voice').value;
+  ['render-button','complete-video-button','gemini-script-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
+  $('#dub-button').disabled=!editable||$('#voice-provider').value==='original'||!$('#dub-voice').value;
   state.cleanupDraft = p?.cleanup_regions?.map(r=>({...r})) || [];
   renderCleanupList();
   renderSegments(p?.segments||[]);
+  refreshSpeakerVoices();
   updateCaptionOverlay();
   updateCleanupOverlay();
 }
 function makeInput(type,value,cls){const input=document.createElement(type==='textarea'?'textarea':'input');if(type!=='textarea')input.type=type;input.className=cls;input.value=value;return input;}
 function addSegment(seg = {start:0,end:2.5,text:''}) {
   const holder=$('#segments');holder.querySelector('.tip')?.remove();
-  const item=document.createElement('div');item.className='segment-card';
+  const item=document.createElement('div');item.className='segment-card';item.dataset.sourceText=seg.source_text||'';item.dataset.needsReview=String(!!seg.needs_review);
   const top=document.createElement('div');top.className='segment-top';const label=document.createElement('span');label.textContent='ĐOẠN '+(holder.querySelectorAll('.segment-card').length+1);
   const remove=document.createElement('button');remove.type='button';remove.textContent='×';remove.title='Xóa câu';remove.addEventListener('click',()=>{item.remove();renumberSegments();});top.append(label,remove);
   const times=document.createElement('div');times.className='segment-time';
   const startLabel=document.createElement('label');startLabel.textContent='Bắt đầu';startLabel.append(makeInput('text',formatSeconds(seg.start),'seg-start'));
   const endLabel=document.createElement('label');endLabel.textContent='Kết thúc';endLabel.append(makeInput('text',formatSeconds(seg.end),'seg-end'));
   times.append(startLabel,endLabel);
-  const content=makeInput('textarea',seg.text,'segment-text');content.placeholder='Nhập lời thoại tiếng Việt…';content.rows=2;
-  item.append(top,times,content);holder.append(item);
+  const content=makeInput('textarea',seg.text,'segment-text');content.placeholder='Phụ đề tiếng Việt…';content.rows=2;
+  const voiceLabel=document.createElement('label');voiceLabel.className='voice-line-label';voiceLabel.textContent='Thoại cho ElevenLabs · chỉnh sao cho vừa cảnh';
+  const voiceInput=makeInput('textarea',seg.voice_text||seg.text,'segment-voice-text');voiceInput.rows=2;voiceLabel.append(voiceInput);
+  const speakerLabel=document.createElement('label');speakerLabel.className='voice-speaker-label';speakerLabel.textContent='Nhân vật';
+  const speakerInput=makeInput('text',seg.speaker||'spk1','segment-speaker');speakerInput.pattern='spk[0-9]+';speakerLabel.append(speakerInput);
+  const origin=document.createElement('small');origin.className='source-line';origin.textContent=seg.source_text?'Nguyên văn: '+seg.source_text:'';
+  if(seg.needs_review){const flag=document.createElement('small');flag.className='review-flag';flag.textContent='Cần kiểm tra lại thời gian/thoại với video gốc';item.append(flag);}
+  item.append(top,times,content,voiceLabel,speakerLabel,origin);holder.append(item);
 }
 function renumberSegments(){ $$('#segments .segment-card').forEach((el,i)=>text(el.querySelector('.segment-top span'),'ĐOẠN '+(i+1))); }
 function renderSegments(items) { const container=$('#segments');container.replaceChildren();if(!items.length){const tip=document.createElement('div');tip.className='tip';tip.textContent='Nhập hoặc nhận dạng lời thoại để bắt đầu.';container.append(tip);return;}items.forEach(addSegment); }
 function collectSegments() {
-  return $$('#segments .segment-card').map((el) => ({start:parseSeconds(el.querySelector('.seg-start').value),end:parseSeconds(el.querySelector('.seg-end').value),text:el.querySelector('.segment-text').value.trim()}));
+  return $$('#segments .segment-card').map((el,i) => {
+    const existing=state.selected?.segments?.[i];
+    const textValue=el.querySelector('.segment-text').value.trim();
+    const spoken=el.querySelector('.segment-voice-text')?.value.trim() || textValue;
+    const speaker=el.querySelector('.segment-speaker')?.value.trim() || 'spk1';
+    const val={start:parseSeconds(el.querySelector('.seg-start').value),end:parseSeconds(el.querySelector('.seg-end').value),text:textValue,voice_text:spoken,speaker};
+    if(el.dataset.sourceText) val.source_text=el.dataset.sourceText;
+    if(el.dataset.needsReview==='true')val.needs_review=true;
+    return val;
+  });
 }
 async function saveSegments(showToast=true){
   if(!state.selected) throw new Error('Chưa chọn dự án.');
@@ -181,13 +192,84 @@ async function saveSegments(showToast=true){
   state.selected=saved;
   if(showToast)toast('Đã lưu nội dung phụ đề thật.');return saved;
 }
-function currentStyle(){return {font:$('#style-font').value,font_size:Number($('#style-size').value),color:$('#style-color').value,outline_color:$('#style-outline-color').value,outline:Number($('#style-outline').value),margin_v:Number($('#style-margin').value),highlight_color:$('#style-highlight-color').value,bold:$('#style-bold').checked};}
+function currentStyle(){return {font:$('#style-font').value,font_size:Number($('#style-size').value),color:$('#style-color').value,outline_color:$('#style-outline-color').value,outline:Number($('#style-outline').value),margin_v:Number($('#style-margin').value),bold:$('#style-bold').checked};}
 async function renderVideo(){
   try{if(!state.selected)throw new Error('Chưa chọn video.');await saveSegments(false);
     const result=await apiPost('/api/projects/'+state.selected.id+'/render',currentStyle());
     toast('Đã gửi lệnh render FFmpeg thực tế.');await refreshCurrent();}
   catch(e){showError(e);}
 }
+function collectVoiceMap(){
+  const map={};
+  for(const row of $$('#speaker-voices [data-speaker]')){
+    const voice=row.querySelector('select')?.value;
+    if(voice)map[row.dataset.speaker]=voice;
+  }
+  return map;
+}
+async function completeVideo(){
+  const button=$('#complete-video-button');
+  try{
+    if(!state.selected) throw new Error('Chưa chọn video.');
+    button.disabled=true;
+    await saveSegments(false);
+    // Save currently selected text/logo search regions before processing.
+    const p=await request('/api/projects/'+state.selected.id+'/cleanup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({regions:state.cleanupDraft})});
+    state.selected=p;
+    const provider=$('#voice-provider').value;
+    const voice=provider==='original'?null:$('#dub-voice').value;
+    if(provider!=='original' && !voice) throw new Error('Hãy liên kết ElevenLabs và chọn một giọng trước khi tạo.');
+    await apiPost('/api/projects/'+state.selected.id+'/complete-video', {style:currentStyle(), voice_provider:provider, voice,
+      voice_map:collectVoiceMap()});
+    toast('Đang tạo video thật: xử lý chữ/logo, đồng bộ giọng và xuất MP4.');
+    await refreshCurrent();
+  }catch(e){showError(e);}finally{button.disabled=state.selected?.status!=='ready';}
+}
+function detectLinkPlatform(){
+  const raw=$('#video-url').value.trim(),label=$('#link-detect');
+  if(!raw){text(label,'Dán link để nhận diện nền tảng video.');return;}
+  try{
+    const host=new URL(raw).hostname.toLowerCase().replace(/^www\./,'');
+    const families=[['youtube.com','YouTube'],['youtu.be','YouTube'],['facebook.com','Facebook'],['fb.watch','Facebook'],['tiktok.com','TikTok'],['vt.tiktok.com','TikTok'],['douyin.com','Douyin'],['v.douyin.com','Douyin'],['bilibili.com','Bilibili'],['b23.tv','Bilibili'],['instagram.com','Instagram']];
+    const match=families.find(([suffix])=>host===suffix||host.endsWith('.'+suffix));
+    text(label,match?'Đã nhận diện: '+match[1]+' · Bấm Nhận diện & tải video để kiểm tra clip thật.':'Link chưa thuộc 6 nền tảng được hỗ trợ.');
+  }catch{text(label,'Link chưa hợp lệ. Hãy dán URL đầy đủ bắt đầu bằng https://');}
+}
+
+async function loadGeminiStatus(){
+  try{
+    const s=await request('/api/integrations/gemini');
+    text($('#gemini-status'),s.connected?'Đã liên kết · '+s.model+' · sẵn sàng phân tích video':'Chưa liên kết Gemini. Sử dụng API key của dự án Free Tier.');
+    $('#gemini-disconnect').disabled=!s.connected;
+    if(s.connected)$('#gemini-model').value=s.model;
+  }catch(e){showError(e);}
+}
+async function linkGemini(event){
+  event.preventDefault();
+  const api_key=$('#gemini-api-key').value.trim();
+  try{
+    const s=await apiPost('/api/integrations/gemini/link',{api_key,model:$('#gemini-model').value});
+    $('#gemini-api-key').value='';
+    toast('Đã liên kết '+s.model+'. Video chỉ được gửi khi bạn chủ động bấm phân tích.');
+    await loadGeminiStatus();
+  }catch(e){showError(e);}
+}
+async function unlinkGemini(){
+  try{
+    await request('/api/integrations/gemini',{method:'DELETE'});
+    toast('Đã ngắt kết nối Gemini.');await loadGeminiStatus();
+  }catch(e){showError(e);}
+}
+async function analyzeGeminiScript(){
+  try{
+    if(!state.selected?.video_file)throw new Error('Chọn hoặc tải video lên trước.');
+    if(!window.confirm('Cho phép VietFrame gửi bản sao video này tới Gemini để nhận diện thoại và tạo lời Việt?'))return;
+    await apiPost('/api/projects/'+state.selected.id+'/gemini-script',{});
+    toast('Gemini đang phân tích nội dung thật của video và viết thoại khớp thời gian.');
+    await refreshCurrent();
+  }catch(e){showError(e);}
+}
+
 async function transcribe(){
   try{if(!state.selected)throw new Error('Chưa chọn dự án.'); await apiPost('/api/projects/'+state.selected.id+'/transcribe',{});toast('Đang phân tích âm thanh bằng Whisper offline.');await refreshCurrent();}
   catch(e){showError(e);}
@@ -213,6 +295,7 @@ async function loadVoices(){
   const provider=$('#voice-provider').value;
   const fallback=document.createElement('option');fallback.value='';fallback.textContent=provider==='kokoro'?'Chưa kết nối KokoroTTS':'Chưa liên kết ElevenLabs';select.append(fallback);
   $('#dub-button').disabled=true;
+  if(provider==='original'){text($('#voice-status'),'Giữ âm thanh gốc · miễn phí');return;}
   if(provider==='kokoro' && !state.capabilities?.tts_kokoro_local){text($('#voice-status'),'Chưa bật giọng local');return;}
   try{
     const result=await request(provider==='kokoro'?'/api/voices':'/api/integrations/elevenlabs/voices');
@@ -226,6 +309,20 @@ async function loadVoices(){
     else{text($('#voice-status'),'Không có giọng khả dụng trên gói API này');}
   }catch(e){text($('#voice-status'),e.message);$('#dub-button').disabled=true;}
 }
+function refreshSpeakerVoices(){
+  const container=$('#speaker-voices');container.replaceChildren();
+  const speakers=[...new Set((state.selected?.segments||[]).map(s=>s.speaker||'spk1'))].sort();
+  const options=[...$('#dub-voice').options].filter(o=>o.value).map(o=>({value:o.value,name:o.textContent}));
+  if(speakers.length<2 || $('#voice-provider').value==='original')return;
+  const hint=document.createElement('small');hint.textContent='Chọn giọng riêng cho từng nhân vật (không bắt buộc)';container.append(hint);
+  for(const speaker of speakers){
+    const wrapper=document.createElement('label');wrapper.dataset.speaker=speaker;wrapper.textContent=speaker+' · ';
+    const select=document.createElement('select');const same=document.createElement('option');same.value='';same.textContent='Giọng mặc định';select.append(same);
+    for(const opt of options){const item=document.createElement('option');item.value=opt.value;item.textContent=opt.name;select.append(item);}
+    wrapper.append(select);container.append(wrapper);
+  }
+}
+
 async function loadElevenStatus(){
  try{const s=await request('/api/integrations/elevenlabs');state.elevenlabsConnected=s.connected;
   text($('#elevenlabs-status'),s.connected?'Đã liên kết · '+(s.label||'ElevenLabs')+' (key không được hiển thị)':'Chưa liên kết. Cần API key một lần.');
@@ -240,65 +337,36 @@ async function linkEleven(event){
 async function unlinkEleven(){
  try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();$('#voice-provider').value='kokoro';await loadVoices();}catch(e){showError(e);}
 }
-function readCleanupDraft(){
- const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
- return {...r,start:Number($('#cleanup-start').value),end:Number($('#cleanup-end').value),method:$('#cleanup-method').value};
-}
-function validateCleanupDraft(r){
- if(!['glyph','edge'].includes(r.method))throw new Error('Phương pháp không hợp lệ.');
- if(!['x','y','w','h'].every(k=>Number.isInteger(r[k])))throw new Error('Tọa độ cần là số nguyên.');
- if(r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi video.');
- if(r.h>12||r.w*r.h>900)throw new Error('Chỉ chọn sát từng dòng chữ; không được che thành dải ngang.');
- if(!Number.isFinite(r.start)||!Number.isFinite(r.end)||r.start<0||r.end<=r.start||r.end>1800)throw new Error('Chọn thời gian hợp lệ.');
-}
 function updateCleanupOverlay(){
- const holder=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
- holder.replaceChildren();
- if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length)return;
- const box=player.getBoundingClientRect(),screenBox=screen.getBoundingClientRect();
- const scale=Math.min(box.width/player.videoWidth,box.height/player.videoHeight);
+ const mask=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
+ if(!state.selected||!player.videoWidth||state.preview==='export'||!state.cleanupDraft?.length){mask.style.display='none';return;}
+ const region=state.cleanupDraft[0], videoBox=player.getBoundingClientRect(), screenBox=screen.getBoundingClientRect();
+ const scale=Math.min(videoBox.width/player.videoWidth,videoBox.height/player.videoHeight);
  const actualW=player.videoWidth*scale,actualH=player.videoHeight*scale;
- const left=box.left-screenBox.left+(box.width-actualW)/2;
- const top=box.top-screenBox.top+(box.height-actualH)/2;
- for(const r of state.cleanupDraft){
-  if(r.start!=null && !(r.start<=player.currentTime&&player.currentTime<r.end))continue;
-  const rect=document.createElement('div');rect.className='cleanup-region';
-  rect.style.cssText='left:'+(left+r.x*actualW/100)+'px;top:'+(top+r.y*actualH/100)+'px;width:'+(r.w*actualW/100)+'px;height:'+(r.h*actualH/100)+'px';
-  holder.append(rect);
- }
+ const left=videoBox.left-screenBox.left+(videoBox.width-actualW)/2;
+ const top=videoBox.top-screenBox.top+(videoBox.height-actualH)/2;
+ mask.style.cssText=`display:block;left:${left+region.x*actualW/100}px;top:${top+region.y*actualH/100}px;width:${region.w*actualW/100}px;height:${region.h*actualH/100}px`;
 }
 function renderCleanupList(){
  const host=$('#cleanup-list');host.replaceChildren();
  (state.cleanupDraft||[]).forEach((r,i)=>{
   const row=document.createElement('div');row.className='cleanup-row';
-  const label=document.createElement('span');
-  label.textContent=(i+1)+'. '+(r.method==='edge'?'Nội suy':'Nét chữ')+' · '+r.x+','+r.y+' · '+r.w+'×'+r.h+'% · '+(r.start??'0')+'–'+(r.end??'hết')+'s';
-  const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Xóa';
-  remove.addEventListener('click',()=>{state.cleanupDraft.splice(i,1);renderCleanupList();updateCleanupOverlay();});
+  const label=document.createElement('span');label.textContent=`Vùng ${i+1}: x ${r.x}%, y ${r.y}%, rộng ${r.w}%, cao ${r.h}%`;
+  const remove=document.createElement('button');remove.type='button';remove.className='text-button';remove.textContent='Xóa';remove.addEventListener('click',()=>{state.cleanupDraft.splice(i,1);renderCleanupList();});
   row.append(label,remove);host.append(row);
  });
 }
-function presetCleanup(x,y,w,h){
- $('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h;
- const candidate=readCleanupDraft();
- const saved=state.cleanupDraft;state.cleanupDraft=[candidate];updateCleanupOverlay();state.cleanupDraft=saved;
-}
-function useCurrentCaptionTime(){
- const player=$('#player'),at=player.currentTime;
- const cue=collectSegments().find(s=>s.start<=at&&s.end>at);
- if(!cue)throw new Error('Đưa video tới một câu phụ đề rồi chọn lại.');
- $('#cleanup-start').value=cue.start.toFixed(2);$('#cleanup-end').value=cue.end.toFixed(2);
- toast('Đã đặt thời gian xuất hiện của câu phụ đề hiện tại.');
-}
+function presetCleanup(x,y,w,h){$('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h; const r={x,y,w,h};const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved;}
 function addCleanup(){
- if(state.cleanupDraft.length>=80)throw new Error('Tối đa 80 vùng chữ.');
- const r=readCleanupDraft();validateCleanupDraft(r);
- state.cleanupDraft.push(r);renderCleanupList();updateCleanupOverlay();
+ if(state.cleanupDraft.length>=3)throw new Error('Tối đa 3 vùng che.');
+ const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
+ if(!Object.values(r).every(Number.isInteger)||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100)throw new Error('Vùng che vượt khỏi khung video.');
+ state.cleanupDraft.push(r);renderCleanupList();
 }
 async function saveCleanup(){
  if(!state.selected)throw new Error('Chưa chọn dự án.');
  const p=await request('/api/projects/'+state.selected.id+'/cleanup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({regions:state.cleanupDraft})});
- state.selected=p;showProject(p);toast('Đã lưu vùng xóa chữ theo thời gian. Xuất MP4 rồi kiểm tra trước/sau.');
+ state.selected=p;showProject(p);toast('Đã lưu các vùng che. Bấm Xuất MP4 để tái tạo nền và chèn chữ Việt.');
 }
 
 async function suggestStyle(){
@@ -322,7 +390,7 @@ async function refreshCurrent(){
 }
 function managePolling(){clearInterval(state.polling);if(state.selected&&ongoing.includes(state.selected.status)){state.polling=setInterval(async()=>{await refreshCurrent();await loadProjects();},1800);}}
 async function loadCapabilities(){
-  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',static_text_cleanup:'Xóa theo nét chữ và thời gian',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
+  try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',gemini_video_script_supported:'Gemini phân tích video & thoại Việt',static_text_cleanup:'Che chữ/logo cố định',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
     const holder=$('#capability-list');holder.replaceChildren();Object.entries(labels).forEach(([key,label])=>{const row=document.createElement('div');row.className='capability';const dot=document.createElement('span');dot.className=data[key]?'yes':'no';dot.textContent=data[key]?'●':'○';const t=document.createElement('b');t.textContent=label;const status=document.createElement('small');status.textContent=data[key]?'Sẵn sàng':'Chưa cài';row.append(dot,t,status);holder.append(row);});
     $('#ai-generate').disabled=!data.ai_video_local;
     await loadVoices();
@@ -383,29 +451,33 @@ function init(){
   $('#add-segment').addEventListener('click',()=>addSegment({start: Math.max(0,(state.selected?.duration||5)-3),end:state.selected?.duration||5,text:''}));
   $('#save-segments').addEventListener('click',()=>saveSegments().catch(showError));
   $('#render-button').addEventListener('click',renderVideo);
+  $('#complete-video-button').addEventListener('click',completeVideo);
+  $('#open-eleven-settings').addEventListener('click',()=>{switchView('settings');$('#elevenlabs-api-key').focus();});
+  $('#video-url').addEventListener('input',detectLinkPlatform);
   $('#transcribe').addEventListener('click',transcribe);
+  $('#gemini-script-button').addEventListener('click',analyzeGeminiScript);
+  $('#gemini-link-form').addEventListener('submit',linkGemini);
+  $('#gemini-disconnect').addEventListener('click',unlinkGemini);
   $('#translate').addEventListener('click',translate);
   $('#suggest-style').addEventListener('click',suggestStyle);
   $('#dub-button').addEventListener('click',dubAudio);
-  $('#voice-provider').addEventListener('change',loadVoices);
+  $('#voice-provider').addEventListener('change',async()=>{await loadVoices();refreshSpeakerVoices();});
   $('#elevenlabs-link-form').addEventListener('submit',linkEleven);
   $('#elevenlabs-disconnect').addEventListener('click',unlinkEleven);
-  $('#style-original-preset').addEventListener('click',()=>{ $('#style-font').value='DejaVu Sans';$('#style-size').value=32;$('#style-color').value='#ffffff';$('#style-outline-color').value='#101010';$('#style-outline').value=3;$('#style-highlight-color').value='#FFD42A';$('#style-margin').value=160;$('#style-bold').checked=true;updateStylePreview();toast('Mẫu gần giống chữ trắng viền đen, nhấn vàng. Không phải font gốc đã xác minh.'); });
-  $('#cleanup-subtitle-preset').addEventListener('click',()=>presetCleanup(10,76,80,8));
-  $('#cleanup-logo-preset').addEventListener('click',()=>presetCleanup(80,3,16,7));
-  ['cleanup-x','cleanup-y','cleanup-w','cleanup-h','cleanup-start','cleanup-end','cleanup-method'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r=readCleanupDraft(); const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
-  $('#cleanup-use-cue').addEventListener('click',()=>{try{useCurrentCaptionTime();}catch(e){showError(e);}});
+  $('#cleanup-subtitle-preset').addEventListener('click',()=>presetCleanup(10,78,78,9));
+  $('#cleanup-logo-preset').addEventListener('click',()=>presetCleanup(77,3,20,12));
+  ['cleanup-x','cleanup-y','cleanup-w','cleanup-h'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r={x:Number($('#cleanup-x').value),y:Number($('#cleanup-y').value),w:Number($('#cleanup-w').value),h:Number($('#cleanup-h').value)}; const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
   $('#cleanup-add').addEventListener('click',()=>{try{addCleanup();}catch(e){showError(e);}});
   $('#cleanup-save').addEventListener('click',()=>saveCleanup().catch(showError));
   $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style');$('#edit-cleanup').classList.toggle('hidden',btn.dataset.editTab!=='cleanup'); }));
-  ['style-font','style-size','style-color','style-outline-color','style-highlight-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
+  ['style-font','style-size','style-color','style-outline-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
   $('#segments').addEventListener('input',updateCaptionOverlay);
-  $('#player').addEventListener('timeupdate',()=>{updateCaptionOverlay();updateCleanupOverlay();});
+  $('#player').addEventListener('timeupdate',updateCaptionOverlay);
   $('#player').addEventListener('loadedmetadata',()=>{updateCaptionOverlay();updateCleanupOverlay();});
-  $('#player').addEventListener('seeked',()=>{updateCaptionOverlay();updateCleanupOverlay();});
+  $('#player').addEventListener('seeked',updateCaptionOverlay);
   window.addEventListener('resize',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
-  updateStylePreview();loadProjects();(async()=>{await loadElevenStatus();if(state.elevenlabsConnected)$('#voice-provider').value='elevenlabs';await loadCapabilities();})();
+  updateStylePreview();loadProjects();(async()=>{await loadElevenStatus();await loadGeminiStatus();await loadCapabilities();})();
 }
 document.addEventListener('DOMContentLoaded',authorize);
