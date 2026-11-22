@@ -1,5 +1,6 @@
 """Actual asynchronous media processing, local worker. No fake progress/success."""
 import json
+import os
 import hashlib
 import logging
 import math
@@ -33,6 +34,67 @@ def tempo_filter(rate):
     factor=rate ** (1.0/count)
     return ','.join(f'atempo={factor:.6f}' for _ in range(count))
 
+
+
+MAX_AUDIO_MIX_INPUTS = 6
+
+
+def _mix_audio_tracks(inputs, output):
+    """Mix a small fixed number of tracks so FFmpeg never opens 80 decoders.
+
+    Each track is already pitch-adjusted and delayed to its timeline position.
+    Audio remains 24 kHz stereo PCM and final duration equals the longest track.
+    """
+    if not 2 <= len(inputs) <= MAX_AUDIO_MIX_INPUTS:
+        raise ValueError('Số luồng trộn âm thanh vượt giới hạn RAM.')
+    command=['ffmpeg','-nostdin','-hide_banner','-v','error','-y',
+             '-threads','1','-filter_complex_threads','1']
+    for item in inputs:
+        command += ['-i',str(item)]
+    labels=''.join(f'[{i}:a]' for i in range(len(inputs)))
+    command += ['-filter_complex',
+                f'{labels}amix=inputs={len(inputs)}:duration=longest:normalize=0[out]',
+                '-map','[out]','-ar','24000','-ac','2',
+                '-c:a','pcm_s16le',str(output)]
+    result=subprocess.run(command,capture_output=True,text=True,timeout=600)
+    if result.returncode or not output.is_file() or output.stat().st_size<100:
+        raise RuntimeError('Ghép giọng thất bại: '+result.stderr[-300:])
+
+
+def mix_audio_batched(prepared, combined):
+    """Bound FFmpeg decoder count and publish final dub atomically.
+
+    A retry reuses the per-sentence TTS cache; intermediates are expendable.
+    Unlike a single 80-input amix, memory use is bounded by six audio inputs.
+    """
+    if not prepared:
+        raise RuntimeError('Không có câu để tạo giọng.')
+    current=list(prepared)
+    temp_files=[]
+    final_tmp=combined.with_name('dub.partial.wav')
+    final_tmp.unlink(missing_ok=True)
+    try:
+        pass_number=0
+        while len(current)>1:
+            next_level=[]
+            for offset in range(0,len(current),MAX_AUDIO_MIX_INPUTS):
+                group=current[offset:offset+MAX_AUDIO_MIX_INPUTS]
+                if len(group)==1:
+                    next_level.append(group[0])
+                    continue
+                part=combined.parent/f'voice-mix-{pass_number:02d}-{offset:03d}.wav'
+                part.unlink(missing_ok=True)
+                temp_files.append(part)
+                _mix_audio_tracks(group,part)
+                next_level.append(part)
+            current=next_level
+            pass_number+=1
+        shutil.copyfile(current[0],final_tmp)
+        os.replace(final_tmp,combined)
+    finally:
+        final_tmp.unlink(missing_ok=True)
+        for path in temp_files:
+            path.unlink(missing_ok=True)
 
 
 def available_speech_window(segments, index, video_duration):
@@ -285,15 +347,7 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     if not prepared:
         raise RuntimeError('Không có câu để tạo giọng.')
     combined=folder/'dub.wav'
-    command=['ffmpeg','-nostdin','-hide_banner','-v','error','-y']
-    for item in prepared:
-        command+=['-i',str(item)]
-    inputs=''.join(f'[{i}:a]' for i in range(len(prepared)))
-    command+=['-filter_complex',f'{inputs}amix=inputs={len(prepared)}:duration=longest:normalize=0[out]',
-              '-map','[out]','-ar','24000','-ac','2',str(combined)]
-    result=subprocess.run(command,capture_output=True,text=True,timeout=600)
-    if result.returncode or not combined.exists():
-        raise RuntimeError('Ghép giọng thất bại: '+result.stderr[-300:])
+    mix_audio_batched(prepared,combined)
     (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
     # Keep verified TTS audio cached so retrying export never spends credits
     # synthesizing the same sentence again. Remove only generated alignment files.
