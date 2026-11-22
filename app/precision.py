@@ -2,9 +2,23 @@
 Output contains no audio: original audio is reattached in media.py.
 """
 import subprocess
+import os
 from pathlib import Path
 import cv2
 from .cleanup import inpaint_frame,validate_regions
+
+def limited_video_dimensions(width, height, max_edge=1280):
+    """Reduce large frames before OpenCV inpaint/FFmpeg on 512 MiB hosts.
+
+    Zero disables the limit. Ensure even H.264 dimensions and preserve aspect.
+    """
+    if not max_edge or max(width,height)<=max_edge:
+        return width,height
+    factor=max_edge/max(width,height)
+    out_w=max(2,2*round(width*factor/2))
+    out_h=max(2,2*round(height*factor/2))
+    return out_w,out_h
+
 
 def precision_video(source:Path,destination:Path,regions):
     glyph=[r for r in validate_regions(regions) if r['method']=='glyph']
@@ -19,9 +33,12 @@ def precision_video(source:Path,destination:Path,regions):
     fps=float(cap.get(cv2.CAP_PROP_FPS))
     if w<8 or h<8 or not (0<fps<=120):
         cap.release();raise ValueError('Video có thông số hình ảnh không hợp lệ.')
+    # Render Free cannot sustain multiple 1080p frame copies + H.264 encoding.
+    max_edge=int(os.getenv('VIETFRAME_MAX_VIDEO_EDGE', '1280'))
+    out_w,out_h=limited_video_dimensions(w,h,max_edge)
     command=['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
              '-threads','1','-filter_threads','1','-f','rawvideo',
-             '-pix_fmt','bgr24','-s',f'{w}x{h}','-r',str(fps),'-i','pipe:0',
+             '-pix_fmt','bgr24','-s',f'{out_w}x{out_h}','-r',str(fps),'-i','pipe:0',
              '-an','-c:v','libx264','-threads','1','-preset','veryfast','-crf','18','-pix_fmt','yuv420p',
              '-movflags','+faststart',str(destination)]
     proc=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -30,6 +47,8 @@ def precision_video(source:Path,destination:Path,regions):
         while True:
             ok,frame=cap.read()
             if not ok:break
+            if (out_w,out_h)!=(w,h):
+                frame=cv2.resize(frame,(out_w,out_h),interpolation=cv2.INTER_AREA)
             frame,info=inpaint_frame(frame,glyph,frames/fps)
             try:proc.stdin.write(frame.tobytes())
             except BrokenPipeError as exc:raise RuntimeError('FFmpeg không nhận được khung hình đã xử lý.') from exc
