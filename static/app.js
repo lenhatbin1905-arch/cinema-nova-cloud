@@ -580,12 +580,87 @@ function renderCleanupList(){
  });
 }
 function presetCleanup(x,y,w,h){$('#cleanup-x').value=x;$('#cleanup-y').value=y;$('#cleanup-w').value=w;$('#cleanup-h').value=h; const r={x,y,w,h,purpose:$('#cleanup-purpose').value};const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved;updateCaptionOverlay();}
+let captionDrawing=false;
+let captionPointerStart=null;
+function drawnVideoGeometry(){
+  const player=$('#player'),screen=$('.screen');
+  if(!player.videoWidth||!player.videoHeight)return null;
+  const vr=player.getBoundingClientRect(), sr=screen.getBoundingClientRect();
+  const scale=Math.min(vr.width/player.videoWidth,vr.height/player.videoHeight);
+  const width=player.videoWidth*scale, height=player.videoHeight*scale;
+  return {screen:sr,left:vr.left-sr.left+(vr.width-width)/2,
+          top:vr.top-sr.top+(vr.height-height)/2,width,height};
+}
+function toggleCaptionDrawing(force){
+  captionDrawing=typeof force==='boolean'?force:!captionDrawing;
+  const control=$('#mark-caption-region'),layer=$('#cleanup-draw-layer');
+  if(captionDrawing){
+    if(!state.selected?.video_url){captionDrawing=false;throw new Error('Chọn video gốc trước khi khoanh chữ.');}
+    state.preview='source';
+    $('#show-source').click();
+    $('#player').pause();
+    document.querySelector('[data-edit-tab="cleanup"]').click();
+    $('#cleanup-purpose').value='subtitle';
+    $('#cleanup-method').value='glyph';
+    $('#cleanup-draw-hint').textContent='Kéo một khung sát chữ tiếng Anh đang hiển thị trên video.';
+  }else{
+    layer.replaceChildren();
+    $('#cleanup-draw-hint').textContent='Chọn vùng khít chữ tiếng Anh để chèn tiếng Việt ngay đúng vị trí đó.';
+  }
+  control.setAttribute('aria-pressed',String(captionDrawing));
+  control.textContent=captionDrawing?'✓ Thoát khoanh vùng':'✎ Khoanh chữ tiếng Anh ngay trên video';
+  layer.classList.toggle('active',captionDrawing);
+}
+function screenVideoPosition(evt,geom){
+  const sx=evt.clientX-geom.screen.left-geom.left;
+  const sy=evt.clientY-geom.screen.top-geom.top;
+  return {x:Math.max(0,Math.min(geom.width,sx)),
+          y:Math.max(0,Math.min(geom.height,sy))};
+}
+function paintDrawingRect(start,now,geom){
+  const layer=$('#cleanup-draw-layer');
+  let rect=layer.querySelector('.drawing-rect');
+  if(!rect){rect=document.createElement('div');rect.className='drawing-rect';layer.append(rect);}
+  const left=geom.left+Math.min(start.x,now.x),top=geom.top+Math.min(start.y,now.y);
+  rect.style.cssText='left:'+left+'px;top:'+top+'px;width:'+Math.abs(now.x-start.x)
+    +'px;height:'+Math.abs(now.y-start.y)+'px';
+}
+function finishCaptionDrawing(evt){
+  const start=captionPointerStart;
+  if(!start)return;
+  captionPointerStart=null;
+  const layer=$('#cleanup-draw-layer'),geom=drawnVideoGeometry();
+  if(!geom){layer.replaceChildren();return;}
+  const stop=screenVideoPosition(evt,geom);
+  const x=Math.round(100*Math.min(start.x,stop.x)/geom.width),
+        y=Math.round(100*Math.min(start.y,stop.y)/geom.height),
+        w=Math.round(100*Math.abs(stop.x-start.x)/geom.width),
+        h=Math.round(100*Math.abs(stop.y-start.y)/geom.height);
+  layer.replaceChildren();
+  if(w<2||h<2){toast('Hãy kéo khung đủ rộng để ôm sát chữ tiếng Anh.',true);return;}
+  if(w*h>900||h>12){toast('Vùng quá lớn. Chỉ khoanh sát một dòng chữ, không che cả hình.',true);return;}
+  $('#cleanup-x').value=x;$('#cleanup-y').value=y;
+  $('#cleanup-w').value=Math.min(w,100-x);$('#cleanup-h').value=Math.min(h,100-y);
+  if(!$('#cleanup-all-video').checked){
+    try{
+      const cue=collectSegments().find(seg=>seg.start<=$('#player').currentTime&&seg.end>$('#player').currentTime);
+      if(cue){$('#cleanup-start').value=cue.start;$('#cleanup-end').value=cue.end;}
+    }catch{}
+  }
+  try{
+    addCleanup();
+    toggleCaptionDrawing(false);
+    toast('Đã khoanh chữ gốc. Bấm “Lưu vùng che và xuất lại” để xử lý thật.');
+  }catch(error){showError(error);}
+}
 function addCleanup(){
  if(state.cleanupDraft.length>=80)throw new Error('Tối đa 80 vùng xử lý.');
  const r=Object.fromEntries(['x','y','w','h'].map(k=>[k,Number($('#cleanup-'+k).value)]));
  r.purpose=$('#cleanup-purpose').value;
  r.method=$('#cleanup-method').value;
- const first=Number($('#cleanup-start').value), last=Number($('#cleanup-end').value);
+ const fullVideo=$('#cleanup-all-video').checked;
+ const first=fullVideo?0:Number($('#cleanup-start').value);
+ const last=fullVideo?Number(state.selected?.duration||$('#player').duration):Number($('#cleanup-end').value);
  if(!Number.isFinite(first)||!Number.isFinite(last)||first<0||last<=first)throw new Error('Thời gian vùng che không hợp lệ.');
  r.start=first;r.end=last;
  if(!['x','y','w','h'].every(k=>Number.isInteger(r[k]))||r.x<0||r.y<0||r.w<2||r.h<2||r.x+r.w>100||r.y+r.h>100||r.w*r.h>900||r.h>12)throw new Error('Vùng che vượt khỏi khung video.');
@@ -731,6 +806,22 @@ function init(){
   $('#cleanup-purpose').addEventListener('change',updateCaptionOverlay);
   $('#style-caption-mode').addEventListener('change',updateCaptionOverlay);
   ['cleanup-x','cleanup-y','cleanup-w','cleanup-h'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r={x:Number($('#cleanup-x').value),y:Number($('#cleanup-y').value),w:Number($('#cleanup-w').value),h:Number($('#cleanup-h').value)}; const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
+  $('#mark-caption-region').setAttribute('aria-pressed','false');
+  $('#mark-caption-region').addEventListener('click',()=>{try{toggleCaptionDrawing();}catch(e){showError(e);}});
+  const drawLayer=$('#cleanup-draw-layer');
+  drawLayer.addEventListener('pointerdown',e=>{
+    const geom=drawnVideoGeometry();if(!captionDrawing||!geom)return;
+    const point=screenVideoPosition(e,geom);
+    captionPointerStart=point;
+    drawLayer.setPointerCapture(e.pointerId);
+    paintDrawingRect(point,point,geom);
+  });
+  drawLayer.addEventListener('pointermove',e=>{
+    if(!captionPointerStart||!captionDrawing)return;
+    const geom=drawnVideoGeometry();if(geom)paintDrawingRect(captionPointerStart,screenVideoPosition(e,geom),geom);
+  });
+  drawLayer.addEventListener('pointerup',e=>{if(captionDrawing)finishCaptionDrawing(e);});
+  drawLayer.addEventListener('pointercancel',()=>{captionPointerStart=null;drawLayer.replaceChildren();});
   $('#cleanup-add').addEventListener('click',()=>{try{addCleanup();}catch(e){showError(e);}});
   $('#cleanup-use-cue').addEventListener('click',()=>{
     try { const cue=collectSegments().find(x=>x.start<=($('#player').currentTime)&&x.end>$('#player').currentTime); if(!cue) throw new Error('Đưa video tới đúng thời điểm có chữ gốc trước.');
