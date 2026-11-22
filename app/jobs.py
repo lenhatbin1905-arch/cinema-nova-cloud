@@ -35,6 +35,23 @@ def tempo_filter(rate):
 
 
 
+def available_speech_window(segments, index, video_duration):
+    """Allow overflow into a silent gap, but never into the next spoken cue.
+
+    Subtitle timestamps stay untouched. This is only activated if the original
+    segment cannot fit at the maximum pitch-preserving speed. Zero padding
+    remains at boundaries and inside gaps so all spoken words are retained.
+    """
+    current = segments[index]
+    default_end = min(float(current['end']), float(video_duration))
+    if index + 1 < len(segments):
+        next_start = float(segments[index + 1]['start'])
+        gap_end = max(default_end, min(next_start - 0.05, float(video_duration)))
+    else:
+        gap_end = max(default_end, float(video_duration) - 0.05)
+    return max(float(current['end']), gap_end)
+
+
 def submit(pid, fn, *args):
     def run():
         try:
@@ -217,23 +234,39 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
         if not math.isfinite(sound_duration) or sound_duration<=0:
             raise RuntimeError('Thời lượng âm thanh TTS không hợp lệ.')
         slot=seg['end']-seg['start']
-        rate=max(1.0,sound_duration/slot)
-        quality_warning=rate>QUALITY_WARNING_TEMPO
+        # A 35ms encoder safety margin prevents FFmpeg's atrim from clipping
+        # the final phoneme when sample/MP3 packet rounding changes duration.
+        margin=min(0.035,slot*0.05)
+        fit_slot=max(0.02,slot-margin)
+        rate=max(1.0,sound_duration/fit_slot)
+        available_end=seg['end']
+        if rate>MAX_AUTO_TEMPO:
+            # Borrow only genuinely unoccupied time, never a neighbor's voice.
+            available_end=available_speech_window(segments,index,project['duration'])
+            slot=available_end-seg['start']
+            margin=min(0.035,slot*0.05)
+            fit_slot=max(0.02,slot-margin)
+            rate=max(1.0,sound_duration/fit_slot)
+        quality_warning=rate>QUALITY_WARNING_TEMPO or available_end>seg['end']+0.001
         within_limit=rate<=MAX_AUTO_TEMPO
+        borrowed=round(max(0.0,available_end-seg['end']),3)
         timing_report.append({'index':index+1,'speaker':seg.get('speaker','spk1'),
             'start':seg['start'],'end':seg['end'],'voice_id':chosen_voice,
             'slot_seconds':round(slot,3),'raw_audio_seconds':round(sound_duration,3),
             'speed_factor':round(rate,3),'speech_text':speak,
+            'borrowed_gap_seconds':borrowed,
             'timing_ok':within_limit,'quality_warning':quality_warning,
-            'note':('Đã tự tăng tốc để khớp thời lượng cảnh, giữ đủ lời thoại; hãy nghe lại độ tự nhiên.'
+            'note':('Đã tận dụng khoảng lặng sau câu để giữ đủ lời thoại; nghe lại phần kết câu.'
+                    if borrowed and within_limit else
+                    'Đã tự tăng tốc để khớp thời lượng cảnh, giữ đủ lời thoại; hãy nghe lại độ tự nhiên.'
                     if quality_warning and within_limit else
-                    'Câu quá dài, cần rút gọn lời thoại hoặc nới thời gian.'
+                    'Không đủ thời gian để đọc trọn câu ở tốc độ rõ ràng. Hãy rút gọn lời thoại hoặc nới mốc thời gian.'
                     if not within_limit else '')})
         if not within_limit:
             (folder/'voice-timing-report.json').write_text(
                 json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
             raise RuntimeError(
-                f'Câu {index+1} cần tăng tốc {rate:.2f}x, vượt ngưỡng chất lượng '
+                f'Câu {index+1} cần tăng tốc {rate:.2f}x ngay cả khi dùng khoảng lặng, vượt ngưỡng chất lượng '
                 f'{MAX_AUTO_TEMPO:.1f}x. Hãy rút gọn riêng ô "Thoại cho ElevenLabs" '
                 'hoặc nới thời gian đoạn; phụ đề đã lưu và video gốc vẫn còn.')
         start_ms=round(seg['start']*1000)
