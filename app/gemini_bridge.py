@@ -11,6 +11,9 @@ import math
 import re
 import sqlite3
 import time
+import base64
+import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -209,48 +212,116 @@ def normalize_script(payload: dict, duration: float):
         'review_count': sum(bool(s.get('needs_review')) for s in verified)}
 
 
+
+MAX_INLINE_VIDEO_BYTES = 12 * 1024 * 1024  # B64 JSON stays below 20MB input limit.
+
+
+def _prepare_inline_video(source: Path, progress=None):
+    """Return a compact playable video; never discard its speech audio.
+
+    Inline avoids 404s caused by resolving an ACTIVE Files API URI at
+    generateContent time. Larger inputs are downscaled on the server.
+    """
+    suffix=source.suffix.lower()
+    if source.stat().st_size <= MAX_INLINE_VIDEO_BYTES and suffix in {'.mp4','.webm'}:
+        if progress: progress(31,'Video đủ nhỏ. Chuẩn bị phân tích trực tiếp, không dùng tham chiếu Files API…')
+        return source, ('video/mp4' if suffix=='.mp4' else 'video/webm'), None
+    if progress: progress(20,'Video vượt ngưỡng gửi trực tiếp. Đang nén hình và giữ tiếng nói cho Gemini…')
+    temp=tempfile.TemporaryDirectory(prefix='vietframe-gemini-inline-')
+    result=Path(temp.name)/'gemini-input.mp4'
+    cmd=['ffmpeg','-hide_banner','-loglevel','error','-y','-i',str(source),
+         '-map','0:v:0','-map','0:a:0?','-vf','scale=-2:480,fps=12',
+         '-c:v','libx264','-preset','veryfast','-crf','31',
+         '-maxrate','380k','-bufsize','760k','-c:a','aac','-b:a','48k',
+         '-movflags','+faststart','-map_metadata','-1',str(result)]
+    try:
+        proc=subprocess.run(cmd,capture_output=True,timeout=165,check=False)
+        if proc.returncode!=0 or not result.exists():
+            raise ValueError('Không nén được video cho Gemini. Hãy thử bản MP4 ngắn hơn.')
+        if not 1024 < result.stat().st_size <= MAX_INLINE_VIDEO_BYTES:
+            raise ValueError('Video sau khi nén vẫn quá lớn. Hãy cắt video ngắn hơn rồi thử lại.')
+    except subprocess.TimeoutExpired as exc:
+        temp.cleanup()
+        raise ValueError('Nén video quá thời gian trên Render Free. Hãy tải MP4 ngắn hoặc nhẹ hơn.') from exc
+    except Exception:
+        temp.cleanup()
+        raise
+    if progress: progress(43,'Đã nén video và giữ âm thanh. Chuẩn bị Gemini viết lời Việt…')
+    return result,'video/mp4',temp
+
+
+def _safe_generation_error(response, model):
+    """Return actionable Google error without leaking key, URI or user media."""
+    code=response.status_code
+    try:
+        body=response.json()
+        err=body.get('error',{}) if isinstance(body,dict) else {}
+        reason=str(err.get('message',''))[:200] if isinstance(err,dict) else ''
+    except (ValueError,TypeError,AttributeError):
+        reason=''
+    # Google error messages can include arbitrary resource strings.
+    reason=re.sub(r'https?://\\S+','[đường dẫn]',reason)
+    reason=re.sub(r'AIza[A-Za-z0-9_-]+','[ẩn]',reason)
+    reason=re.sub(r'files/[A-Za-z0-9_-]+','[tệp]',reason)
+    if code==404:
+        return ('Gemini không tìm thấy model hoặc tài nguyên ở bước tạo phụ đề '
+                '(generateContent, HTTP 404; '+model+'). Video đã được gửi trực tiếp, '
+                'không qua Files API. Hãy kiểm tra model có hỗ trợ generateContent trong tài khoản Google AI Studio. '
+                + (reason[:130] if reason else ''))
+    if code in (401,403):
+        return 'Google từ chối quyền Gemini khi tạo phụ đề (HTTP '+str(code)+'). Kiểm tra API key và quyền truy cập model.'
+    if code==429:
+        return 'Gemini đang hết hạn mức Free hoặc bị giới hạn tần suất. Không chuyển sang gói trả phí.'
+    if code >=500:
+        return 'Máy chủ Gemini đang gặp lỗi HTTP '+str(code)+'. Hãy thử lại khi dịch vụ ổn định.'
+    return 'Gemini không tạo được phụ đề (HTTP '+str(code)+'). '+reason[:145]
+
+
 def analyze_video(source: Path, duration: float, progress=None):
+    """Use inline video data; Files API dereference previously caused HTTP 404."""
     if not 0 < duration <= MAX_ANALYSIS_DURATION:
-        raise ValueError('Bản Gemini Free-first chỉ phân tích tối đa 180 giây mỗi lượt.')
+        raise ValueError('Gemini Free-first hỗ trợ tối đa 180 giây mỗi lượt.')
     if not source.is_file():
         raise ValueError('Video nguồn không tồn tại.')
-    key, model = _key_model()
-    remote_name = None
-    if progress: progress(11, 'Đang mở kết nối Gemini và chuẩn bị video gốc…')
+    if source.stat().st_size > MAX_ANALYSIS_BYTES:
+        raise ValueError('Video trên 60MB. Hãy tải bản ngắn hoặc nhẹ hơn.')
+    key,model=_key_model()
+    temp=None
+    if progress: progress(11,'Đang xác minh nguồn video và chuẩn bị gửi Gemini…')
     try:
-        with httpx.Client(base_url=API, trust_env=False, timeout=30, follow_redirects=False) as client:
-            remote_name, mime, uri = _upload(client, source, key, progress=progress)
-            uri = _wait_ready(client, key, remote_name, progress=progress)
-            prompt = PROMPT.replace('{duration:.2f}', f'{duration:.2f}')
-            request = {
-                'contents': [{'parts': [{'fileData': {'mimeType': mime, 'fileUri': uri}}, {'text': prompt}]}],
-                'generationConfig': {'temperature': 0.15, 'maxOutputTokens': 5500,
-                    'responseMimeType': 'application/json'}}
-            if progress: progress(74, 'Gemini đang nhận dạng lời nói, dịch và viết thoại Việt theo từng cảnh…')
-            answer = client.post('/v1beta/models/' + model + ':generateContent',
-                headers={'x-goog-api-key': key}, json=request, timeout=120)
-            _check_response(answer)
-            if progress: progress(91, 'Gemini đã trả kết quả. Đang kiểm tra mốc thời gian và câu thoại…')
-            data = answer.json()
-            candidates = data.get('candidates') or []
-            parts = candidates[0].get('content', {}).get('parts', []) if candidates else []
-            output = ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
-            if not output:
-                raise ValueError('Gemini không trả lời thoại. Không tự điền nội dung giả.')
-            try:
-                script = json.loads(output)
-            except json.JSONDecodeError as exc:
-                raise ValueError('Gemini trả JSON lỗi. Hãy thử đoạn video ngắn hơn.') from exc
-            result=normalize_script(script, duration)
-            if progress: progress(97, 'Đã kiểm tra phụ đề. Đang lưu bản thoại vào dự án…')
-            return result
-    except httpx.RequestError as exc:
-        raise ValueError('Kết nối Gemini gián đoạn. Video chưa được phân tích xong.') from exc
+        path,mime,temp=_prepare_inline_video(source,progress=progress)
+        if progress: progress(55,'Đang chuẩn bị video cho Gemini, giữ cả hình và âm thanh…')
+        encoded=base64.b64encode(path.read_bytes()).decode('ascii')
+        request={
+            'contents':[{'role':'user','parts':[
+                {'inlineData':{'mimeType':mime,'data':encoded}},
+                {'text':PROMPT.replace('{duration:.2f}',f'{duration:.2f}')}] }],
+            'generationConfig':{'temperature':0.15,'maxOutputTokens':5500,
+                                'responseMimeType':'application/json'}}
+        del encoded
+        if progress: progress(74,'Gemini đang nhận dạng lời nói và viết phụ đề Việt theo cảnh…')
+        try:
+            with httpx.Client(base_url=API,trust_env=False,timeout=30,follow_redirects=False) as client:
+                response=client.post('/v1beta/models/'+model+':generateContent',
+                                     headers={'x-goog-api-key':key},json=request,timeout=140)
+        except httpx.RequestError as exc:
+            raise ValueError('Kết nối Gemini bị gián đoạn trong khi phân tích video.') from exc
+        if response.status_code>=400:
+            raise ValueError(_safe_generation_error(response,model))
+        if progress: progress(91,'Gemini trả kết quả. Đang kiểm tra phụ đề và mốc thời gian…')
+        data=response.json()
+        candidates=data.get('candidates') or []
+        parts=candidates[0].get('content',{}).get('parts',[]) if candidates else []
+        output=''.join(p.get('text','') for p in parts if isinstance(p,dict))
+        if not output:
+            raise ValueError('Gemini không trả lời thoại có thể dùng. Không tạo phụ đề giả.')
+        try:
+            script=json.loads(output)
+        except json.JSONDecodeError as exc:
+            raise ValueError('Gemini trả bản thoại JSON chưa hợp lệ. Hãy thử clip ngắn hơn.') from exc
+        result=normalize_script(script,duration)
+        if progress: progress(97,'Đã xác thực lời Việt và thời gian. Đang lưu phụ đề…')
+        return result
     finally:
-        if remote_name:
-            try:
-                with httpx.Client(base_url=API, trust_env=False, timeout=12, follow_redirects=False) as clean_client:
-                    clean_client.delete('/v1beta/' + remote_name, headers={'x-goog-api-key': key})
-            except Exception:
-                # Google automatically deletes a File API upload after a limited retention period.
-                pass
+        if temp is not None:
+            temp.cleanup()
