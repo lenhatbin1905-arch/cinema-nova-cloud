@@ -28,7 +28,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.16.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.16.1',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
