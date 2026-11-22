@@ -357,7 +357,7 @@ async function loadElevenStatus(){
 async function linkEleven(event){
  event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
  try{await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';toast('Đã liên kết ElevenLabs an toàn.');await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();}
- catch(e){showError(e);}finally{input.value='';button.disabled=false;}
+ catch(e){text($('#elevenlabs-status'), 'Không thể liên kết: '+e.message);showError(e);}finally{input.value='';button.disabled=false;}
 }
 async function unlinkEleven(){
  try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();$('#voice-provider').value='kokoro';await loadVoices();}catch(e){showError(e);}
