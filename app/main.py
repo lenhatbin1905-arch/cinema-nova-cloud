@@ -233,7 +233,9 @@ def update_password(request: Request, body: ChangePassword):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','version':'0.9.0','mode':'local-first'}
+    from . import credential_store
+    return {'status':'ok','version':'0.12.0','mode':'local-first',
+            'persistent_credentials':credential_store.persistent()}
 
 
 @app.get('/api/capabilities')

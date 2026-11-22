@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from . import config
+from . import config, credential_store as store
 
 API_BASE = 'https://api.elevenlabs.io'
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
@@ -32,15 +32,11 @@ def _fernet():
 
 
 def init():
-    with sqlite3.connect(config.DB_PATH) as db:
-        db.execute('''CREATE TABLE IF NOT EXISTS provider_credentials (
-            provider TEXT PRIMARY KEY, encrypted_key BLOB NOT NULL, account_label TEXT NOT NULL DEFAULT ''
-        )''')
+    store.init()
 
 
 def _get_key():
-    with sqlite3.connect(config.DB_PATH) as db:
-        row = db.execute("SELECT encrypted_key FROM provider_credentials WHERE provider='elevenlabs'").fetchone()
+    row = store.get('elevenlabs')
     if not row:
         return None
     try:
@@ -50,10 +46,9 @@ def _get_key():
 
 
 def is_connected():
-    with sqlite3.connect(config.DB_PATH) as db:
-        row = db.execute("SELECT account_label FROM provider_credentials WHERE provider='elevenlabs'").fetchone()
-    result={'connected': bool(row), 'label': row[0] if row else None}
-    if row and 'quyền giới hạn' in row[0]:
+    row = store.get('elevenlabs')
+    result={'connected': bool(row), 'label': row[1] if row else None, 'storage': store.kind()}
+    if row and 'quyền giới hạn' in row[1]:
         result['limited']=True
         result['warning']='Chỉ chọn được giọng. Cần User → Read để xác minh hạn mức Free trước khi tạo tiếng.'
     return result
@@ -109,8 +104,7 @@ def link(api_key):
         label = 'ElevenLabs (quyền giới hạn)'
         limited = True
     encrypted = _fernet().encrypt(api_key.encode('utf-8'))
-    with sqlite3.connect(config.DB_PATH) as db:
-        db.execute("INSERT OR REPLACE INTO provider_credentials(provider, encrypted_key, account_label) VALUES ('elevenlabs', ?, ?)", (encrypted, label))
+    store.save('elevenlabs', encrypted, label)
     result={'connected': True, 'label': label}
     if limited:
         result['limited']=True
@@ -119,8 +113,7 @@ def link(api_key):
 
 
 def disconnect():
-    with sqlite3.connect(config.DB_PATH) as db:
-        db.execute("DELETE FROM provider_credentials WHERE provider='elevenlabs'")
+    store.delete('elevenlabs')
     return {'connected': False}
 
 

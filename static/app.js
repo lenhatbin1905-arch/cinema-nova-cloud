@@ -334,7 +334,7 @@ async function loadGeminiStatus(){
     const s=await request('/api/integrations/gemini');
     showIntegrationConnection('gemini',s.connected?'connected':'disconnected',
       s.connected?'Đã kết nối Gemini thành công':'Chưa kết nối Gemini',
-      s.connected?'API key đã xác minh khi liên kết · Model: '+(s.model||'chưa xác định')+'. Lưu ý: tạo phụ đề vẫn cần kiểm tra riêng trên video thật.':'Nhập Gemini API key Free Tier để kết nối.');
+      s.connected?'API key đã xác minh khi liên kết · Model: '+(s.model||'chưa xác định')+' · '+(s.storage||'Đang kiểm tra nơi lưu')+'. Phân tích video được kiểm tra riêng.':'Nhập Gemini API key Free Tier để kết nối.');
     $('#gemini-disconnect').disabled=!s.connected;
     $('#gemini-link-form button[type=submit]').textContent=s.connected?'Cập nhật API key Gemini':'Kết nối Gemini';
     if(s.connected && s.model)$('#gemini-model').value=s.model;
@@ -431,7 +431,7 @@ async function loadElevenStatus(){
       s.connected?'Đã kết nối ElevenLabs thành công':'Chưa kết nối ElevenLabs',
       !s.connected?'Nhập API key một lần để chọn giọng.'
         :limited?'API đã xác minh quyền đọc giọng. Chưa thể xác minh hạn mức Free; cần User → Read trước khi tạo tiếng.'
-        :'Tài khoản: '+(s.label||'ElevenLabs')+' · API key được lưu mã hóa. Hạn mức Free được kiểm tra trước khi tạo giọng.');
+        :'Tài khoản: '+(s.label||'ElevenLabs')+' · API key mã hóa · '+(s.storage||'Đang kiểm tra nơi lưu')+'. Hạn mức Free được kiểm tra trước khi tạo giọng.');
     $('#elevenlabs-disconnect').disabled=!s.connected;
     $('#elevenlabs-link-form button[type=submit]').textContent=s.connected?'Thay API key ElevenLabs':'Liên kết tài khoản';
   }catch(e){

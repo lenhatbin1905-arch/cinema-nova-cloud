@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from . import config, elevenlabs_bridge as eleven
+from . import config, elevenlabs_bridge as eleven, credential_store as store
 from .subtitles import verify_segments
 
 API = 'https://generativelanguage.googleapis.com'
@@ -54,11 +54,7 @@ def _connect():
 
 
 def init():
-    # ElevenLabs initializes the shared credentials table before us in app lifespan.
-    with _connect() as db:
-        db.execute('''CREATE TABLE IF NOT EXISTS provider_credentials (
-            provider TEXT PRIMARY KEY, encrypted_key BLOB NOT NULL, account_label TEXT NOT NULL DEFAULT ''
-        )''')
+    store.init()
 
 
 def link(api_key: str, *, model: str = MODEL):
@@ -76,28 +72,26 @@ def link(api_key: str, *, model: str = MODEL):
     data = res.json()
     if not isinstance(data, dict) or not data.get('name'):
         raise ValueError('API Gemini chưa trả thông tin model hợp lệ.')
-    with _connect() as db:
-        db.execute("INSERT OR REPLACE INTO provider_credentials(provider, encrypted_key, account_label) VALUES ('gemini', ?, ?)",
-                   (eleven._fernet().encrypt(key.encode()), model))
+    supported = data.get('supportedGenerationMethods')
+    if isinstance(supported, list) and 'generateContent' not in supported:
+        raise ValueError('Model Gemini này có thể xem thông tin nhưng không hỗ trợ generateContent. Hãy chọn Flash/Lite khác.')
+    store.save('gemini', eleven._fernet().encrypt(key.encode()), model)
     return {'connected': True, 'model': model}
 
 
 def status():
-    with _connect() as db:
-        row = db.execute("SELECT account_label FROM provider_credentials WHERE provider='gemini'").fetchone()
-    return {'connected': bool(row), 'model': row[0] if row else None, 'free_first': True,
+    row = store.get('gemini')
+    return {'connected': bool(row), 'model': row[1] if row else None, 'storage': store.kind(), 'free_first': True,
             'note': 'VietFrame không bật billing. Chỉ dùng API key thuộc dự án Gemini không có billing; API không xác nhận được trạng thái billing.'}
 
 
 def disconnect():
-    with _connect() as db:
-        db.execute("DELETE FROM provider_credentials WHERE provider='gemini'")
+    store.delete('gemini')
     return {'connected': False}
 
 
 def _key_model():
-    with _connect() as db:
-        row = db.execute("SELECT encrypted_key, account_label FROM provider_credentials WHERE provider='gemini'").fetchone()
+    row = store.get('gemini')
     if not row:
         raise ValueError('Chưa liên kết Gemini. Vào Cài đặt để thêm API key Free Tier.')
     try:

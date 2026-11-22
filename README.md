@@ -157,3 +157,10 @@ Xem **[hướng dẫn đăng nhập Google](docs/GOOGLE_LOGIN_SETUP.md)** để 
 ## Khôi phục khi nhập YouTube Shorts thất bại (bản thử v0.10)
 
 YouTube có thể từ chối trả luồng phát cho IP của Render, kể cả khi link Shorts được nhận diện đúng và yt-dlp có JS runtime. VietFrame không tuyên bố mọi video YouTube đều có thể tải được. Trong dự án trạng thái *Có lỗi*, có nút tải lên tệp MP4/MOV/WEBM/MKV mà chủ sở hữu có quyền sử dụng. Tệp được xác thực bằng ffprobe, thay video nguồn của chính dự án lỗi này, rồi tiếp tục Gemini/ElevenLabs như bình thường. API yêu cầu phiên đăng nhập chủ sở hữu, CSRF, xác nhận quyền sử dụng và giới hạn dung lượng/thời lượng cấu hình tại Render. Tệp không hợp lệ vẫn giữ trạng thái lỗi để người dùng thử lại. Giới hạn thực của dịch vụ được hiện trong giao diện, thay vì ghi cố định 350 MB.
+
+
+## v0.12 — Giữ kết nối API lâu dài trên Render Free
+
+Khi `VIETFRAME_CREDENTIALS_DATABASE_URL` chỉ tới Neon Postgres gói Free, khóa Gemini và ElevenLabs được Fernet mã hóa bằng `VIETFRAME_CREDENTIAL_ENCRYPTION_KEY` lưu trên Render trước khi cất trong bảng `vietframe_provider_credentials`. Liên kết giữ nguyên khi deploy/restart; không đưa API key hay DB URL vào GitHub. `VIETFRAME_REQUIRE_PERSISTENT_KEYS=true` ngăn fallback về SQLite tạm nếu cấu hình Neon bị mất. Chỉ chuyển khóa mới sau khi đăng nhập và liên kết lại một lần; không có cách an toàn để tự lấy khóa của container cũ. SQLite của dự án video vẫn là tạm và video sẽ mất sau redeploy; lưu trữ video bền vững cần object storage riêng.
+
+Gemini v0.12 thử đường gửi dữ liệu video trực tiếp vào `generateContent` thay cho Files API (đã có lỗi HTTP 404 sau khi tệp ACTIVE). Video lớn được nén thành MP4 nhỏ để nằm trong ngưỡng inline. Không tự gọi API trả phí hoặc giả vờ hoàn tất phụ đề; trả lỗi rõ theo bước nếu Google vẫn từ chối model. 
