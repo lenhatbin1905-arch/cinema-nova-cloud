@@ -260,7 +260,7 @@ def _safe_generation_error(response, model):
     except (ValueError,TypeError,AttributeError):
         reason=''
     # Google error messages can include arbitrary resource strings.
-    reason=re.sub(r'https?://\\S+','[đường dẫn]',reason)
+    reason=re.sub(r'https?://\S+','[đường dẫn]',reason)
     reason=re.sub(r'AIza[A-Za-z0-9_-]+','[ẩn]',reason)
     reason=re.sub(r'files/[A-Za-z0-9_-]+','[tệp]',reason)
     if code==404:
