@@ -82,3 +82,42 @@ def test_frontend_references_word_pop_and_real_original_subtitle_region():
     assert 'previewWordPop' in js
     assert 'r.purpose' in js
     assert 'cleanup-use-cue' in js
+
+
+
+def test_draw_english_subtitle_area_supports_full_video_and_cleanup_purpose():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    html=(root/'static/index.html').read_text(encoding='utf8')
+    js=(root/'static/app.js').read_text(encoding='utf8')
+    css=(root/'static/style.css').read_text(encoding='utf8')
+    assert 'id="mark-caption-region"' in html
+    assert 'id="cleanup-draw-layer"' in html
+    assert 'id="cleanup-all-video"' in html
+    assert "function finishCaptionDrawing(evt)" in js
+    assert "function toggleCaptionDrawing(force)" in js
+    assert "drawLayer.addEventListener('pointerdown'" in js
+    assert "drawLayer.addEventListener('pointerup'" in js
+    assert "['x','y','w','h'].every(k=>Number.isInteger(r[k]))" in js
+    assert "Number(state.selected?.duration||$('#player').duration)" in js
+    assert "#cleanup-draw-layer.active" in css
+    assert "style.caption_mode==='word_pop'" in js
+
+
+def test_caption_selection_purpose_roundtrip_with_api(client):
+    import io
+    from tests.test_api import fake_video
+    video = fake_video()
+    p = client.post('/api/projects/upload',
+        data={'license_confirmed':'true'},
+        files={'file':('roi.mp4',io.BytesIO(video),'video/mp4')}).json()
+    pid = p['id']
+    first = client.put(f'/api/projects/{pid}/cleanup',json={'regions':[
+        {'x':15,'y':70,'w':50,'h':8,'start':0,'end':2.2,
+         'method':'glyph','purpose':'subtitle'}]})
+    assert first.status_code==200,first.text
+    saved = first.json()['cleanup_regions'][0]
+    assert saved['purpose']=='subtitle'
+    assert saved['x']==15 and saved['y']==70
+    assert saved['start']==0 and saved['end']==2.2
+    assert saved['method']=='glyph'
