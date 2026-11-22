@@ -218,7 +218,7 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
             'slot_seconds':round(slot,3),'raw_audio_seconds':round(sound_duration,3),
             'speed_factor':round(rate,3),'speech_text':speak,
             'timing_ok':within_limit,'quality_warning':quality_warning,
-            'note':('Đã tự căn nhanh để giữ đủ lời thoại; hãy nghe lại độ tự nhiên.'
+            'note':('Đã tự tăng tốc để khớp thời lượng cảnh, giữ đủ lời thoại; hãy nghe lại độ tự nhiên.'
                     if quality_warning and within_limit else
                     'Câu quá dài, cần rút gọn lời thoại hoặc nới thời gian.'
                     if not within_limit else '')})
