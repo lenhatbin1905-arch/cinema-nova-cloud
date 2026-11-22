@@ -1,4 +1,4 @@
-# VietFrame Studio (v0.6) — Free-first local video workspace
+# VietFrame Studio (v0.8) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
