@@ -34,7 +34,13 @@ Nếu muốn chạy Docker:
 docker compose up --build
 ```
 
-Mặc định chỉ mở cổng 8010 trên `127.0.0.1`; project/video và database tài khoản lưu ở `./workspace` và không commit vào Git. Nếu chạy qua Docker/VM khiến server thấy IP khác loopback, đặt một mã thiết lập dài bằng `VIETFRAME_SETUP_TOKEN` trong biến môi trường trước khi tạo tài khoản đầu tiên; không chia sẻ mã này công khai. Mẫu cấu hình: `.env.example`.
+Mặc định chỉ mở cổng 8010 trên `127.0.0.1`; project/video và database tài khoản lưu ở `./workspace` và không commit vào Git. Khi chạy trong Docker, địa chỉ client có thể là gateway Docker thay vì `127.0.0.1`. Cách đơn giản, an toàn để tạo tài khoản đầu tiên trên Docker:
+
+```bash
+docker compose exec vietframe python -m app.auth create-owner
+```
+
+Lệnh hỏi email/mật khẩu trực tiếp trong terminal, **không gửi qua chat và không hiện mật khẩu ra màn hình**. Sau đó mở `/login` để đăng nhập. Nếu dùng giao diện tạo tài khoản đầu tiên từ mạng Docker/VM, đặt mã bí mật `VIETFRAME_SETUP_TOKEN` trong file `.env` (cùng thư mục `docker-compose.yml`) và nhập mã khi được yêu cầu. `docker-compose.yml` đã truyền biến môi trường này vào container; không công khai mã. Mẫu cấu hình: `.env.example`.
 
 ## Bật AI miễn phí (không dùng API trả phí)
 
@@ -92,5 +98,5 @@ Xem [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) để biết chuẩn nghiệm thu t
 - Không có mật khẩu mặc định hoặc tài khoản cài sẵn. Tài khoản đầu tiên do chính chủ sở hữu tạo tại `/login`.
 - Không mở đăng ký tự do; bản này chỉ hỗ trợ một người sử dụng vì các dự án chưa có trường user_id.
 - Đổi mật khẩu trong **Hệ thống → Đổi mật khẩu**; thao tác này kết thúc toàn bộ phiên đăng nhập.
-- Mất mật khẩu: quản trị viên có quyền máy chủ phải khôi phục qua cơ chế quản trị ngoài ứng dụng. Không có lối vào mặc định hoặc mật khẩu bí mật được tích hợp.
+- Mất mật khẩu: quản trị viên có quyền máy chủ chạy `python -m app.auth reset-owner-password` (hoặc `docker compose exec vietframe python -m app.auth reset-owner-password`). Hệ thống yêu cầu mật khẩu mới trong terminal rồi thu hồi mọi phiên đăng nhập. Không có mật khẩu mặc định hoặc cửa hậu.
 - Trên HTTPS, bắt buộc đặt `VIETFRAME_COOKIE_SECURE=true` và cấu hình reverse proxy chuyển scheme tin cậy.

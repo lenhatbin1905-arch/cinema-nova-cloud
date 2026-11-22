@@ -178,3 +178,52 @@ def change_password(user_id: int, old_password: str, new_password: str):
         c.execute('UPDATE owner_users SET password_hash=? WHERE id=?', (new_hash, user_id))
         c.execute('DELETE FROM auth_sessions WHERE user_id=?', (user_id,))
     return True
+
+
+def reset_owner_password(new_password: str):
+    """Administrator-only offline action; invalidates all sessions."""
+    digest = hash_password(new_password)
+    with _connection() as c:
+        row = c.execute('SELECT id FROM owner_users LIMIT 1').fetchone()
+        if row is None:
+            raise ValueError('Chưa có chủ sở hữu để khôi phục mật khẩu.')
+        c.execute('UPDATE owner_users SET password_hash=? WHERE id=?', (digest, row['id']))
+        c.execute('DELETE FROM auth_sessions WHERE user_id=?', (row['id'],))
+
+
+def _cli():
+    import getpass
+    import sys
+    action = sys.argv[1] if len(sys.argv) > 1 else ''
+    if action not in {'create-owner', 'reset-owner-password'}:
+        print('Usage: python -m app.auth {create-owner|reset-owner-password}')
+        return 2
+    init()
+    if action == 'create-owner':
+        if has_owner():
+            print('An owner account already exists; registration is locked.')
+            return 1
+        email = input('Owner email: ').strip()
+    else:
+        if not has_owner():
+            print('No owner account exists.')
+            return 1
+    password = getpass.getpass('New password (12+ chars): ')
+    confirmation = getpass.getpass('Confirm new password: ')
+    if password != confirmation:
+        print('Passwords do not match.')
+        return 1
+    try:
+        if action == 'create-owner':
+            create_first_owner(email, password)
+        else:
+            reset_owner_password(password)
+    except ValueError as exc:
+        print(str(exc))
+        return 1
+    print('Owner credentials saved. You can now sign in at /login.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(_cli())

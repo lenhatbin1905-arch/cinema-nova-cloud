@@ -126,3 +126,12 @@ def test_login_csrf_origin_and_password_policy(client):
         assert other.post('/api/auth/login', json={'email':OWNER,'password':PASS}, headers={'Origin':'https://evil.example'}).status_code == 403
         assert other.post('/api/auth/login', json={'email':OWNER,'password':PASS[:6]}).status_code == 422
         assert other.post('/api/auth/setup', json={'email':'test@example.com','password':PASS,'setup_token':'local-test-setup-key'}, headers={'Origin':'https://evil.example'}).status_code == 403
+
+
+def test_offline_owner_password_reset_revokes_sessions(client):
+    assert client.get('/api/auth/me').status_code == 200
+    auth.reset_owner_password('recovered-owner-password-123456')
+    assert client.get('/api/auth/me').status_code == 401
+    with stranger() as other:
+        assert other.post('/api/auth/login',json={'email':OWNER,'password':PASS}).status_code == 401
+        assert other.post('/api/auth/login',json={'email':OWNER,'password':'recovered-owner-password-123456'}).status_code == 200

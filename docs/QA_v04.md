@@ -2,7 +2,7 @@
 
 ## Completed in current development environment
 
-- Python backend test suite: **51 / 51 PASS** (2026-11-22).
+- Python backend test suite: **52 / 52 PASS** (2026-11-22).
 - `node --check static/app.js` and `node --check static/login.js`: PASS.
 - Chromium static visual checks: 1440x900, 768x1024, 390x844, 360x760: PASS, no horizontal overflow, login form visible.
 - HTTP client integration: first owner setup -> protected project API -> logout -> protected API returns 401: PASS.
@@ -16,7 +16,7 @@
 - Random login session token is stored as SHA-256 hash in SQLite; HttpOnly, SameSite=Strict, 7-day session.
 - All project/video/audio/AI APIs require a valid owner session. Mutation requests require a per-session CSRF header and same-origin validation.
 - Rate limit: 8 failed logins per client IP in a 15-minute window.
-- Logout deletes current server session; password change invalidates every session.
+- Logout deletes current server session; password change invalidates every session. Offline CLI supports first owner creation and password recovery.
 
 ## Limits: not approved for public commercial rollout
 
