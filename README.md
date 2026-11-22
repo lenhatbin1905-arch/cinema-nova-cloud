@@ -1,4 +1,4 @@
-# VietFrame Studio (v0.5) — Free-first local video workspace
+# VietFrame Studio (v0.6) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
@@ -56,15 +56,25 @@ pip install -r requirements-ai.txt
 
 **TTS giọng Việt:** có pipeline thực tế cho KokoroTTS OpenAI-compatible local server (POST `/v1/audio/speech`): tổng hợp từng câu, căn thời gian, ghép thành `dub.wav`, và thay âm thanh video khi xuất MP4. Chưa kiểm thử chất lượng giọng trên model được cài thực tế, chưa có lip-sync, chưa tách nhạc và thoại gốc, chưa phân biệt nhiều người nói. Cần bật KokoroTTS riêng, đặt `KOKORO_TTS_URL=http://127.0.0.1:7860` (trong Docker Compose dùng địa chỉ dịch vụ nội bộ); nguồn hướng dẫn: https://hangry-labs.github.io/kokoroTTS/docs/dockerhub.html. Giọng Việt thuộc pack riêng; chọn voice id từ `/tts/voices`. Không khai báo ElevenLabs miễn phí vĩnh viễn.
 
+## Làm sạch phụ đề không che cả nửa màn hình (v0.6)
+
+- Chế độ **Xóa theo nét chữ**: OpenCV xác định cụm pixel trắng/vàng ở khung chữ nhỏ, lấy thêm viền, rồi phục hồi bằng inpainting Telea. Không tô mờ cả khung chữ nhật.
+- Chế độ **Nội suy cạnh**: FFmpeg delogo, chỉ dành cho logo nhỏ/nền đơn giản.
+- Vùng chữ có thời điểm bắt đầu và kết thúc, tối đa 80 vùng; mỗi vùng bị giới hạn 9% diện tích video và 12% chiều cao.
+- Chèn lại phụ đề Việt bằng ASS, trắng viền đen, dùng dấu `[[từ cần nhấn]]` để tô vàng. Có preset phong cách gần giống video mẫu, **không khẳng định đã nhận diện font chính xác**.
+- Nếu không phát hiện chữ trong vùng xử lý, hệ thống báo lỗi thay vì báo xóa thành công. Nền phức tạp có thể còn vết; chưa có OCR tracking và temporal diffusion.
+- QA: 63/63 kiểm thử PASS tại môi trường phát triển; video 4 giây dựng tổng hợp để đối chiếu; link TikTok gốc chưa thể lấy về; mẫu MP4 đã bị nhòe sẵn không khôi phục được thông tin đã mất. Xem `docs/QA_v06.md`.
+- Không gọi API trả phí; ElevenLabs vẫn cần liên kết riêng và quota Free nếu có.
+
 ## Font giống video gốc
 
-Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.5 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
+Mục tiêu sản phẩm là chuyển phụ đề gốc → phụ đề tiếng Việt cùng phong cách, nhưng **v0.6 chưa có nhận diện font tự động 1:1, OCR tracking, temporal inpainting**. Giao diện cho phép điều chỉnh font, màu, viền và xem bản render. Gợi ý màu có thể sai nếu hậu cảnh nhiều màu. Font phải được cài trên máy và hỗ trợ tiếng Việt.
 
 ## Quyền sử dụng và an toàn
 
 Chỉ nhập video mà bạn có quyền tải/chỉnh sửa hoặc được chủ sở hữu cho phép. Không sử dụng để xóa watermark nhằm mạo nhận quyền tác giả. Không gửi mật khẩu, cookie Facebook hoặc key API qua giao diện.
 
-**Chưa đủ điều kiện triển khai Internet công khai.** Bản v0.5 đã có xác thực một chủ sở hữu, băm PBKDF2, cookie HttpOnly/SameSite Strict, CSRF, khóa đăng ký sau tài khoản đầu tiên và chống brute force cơ bản. Khi đưa lên Internet cần HTTPS với `VIETFRAME_COOKIE_SECURE=true`, kiểm tra URL/redirect sâu hơn, chống SSRF toàn pipeline, giới hạn tác vụ/tải lên theo IP, backup database và file, giám sát chống lạm dụng, snapshot/restore và audit độc lập. Không chia sẻ tài khoản với nhiều người; dự án chưa tách biệt theo user. Docker expose local-only.
+**Chưa đủ điều kiện triển khai Internet công khai.** Bản v0.6 đã có xác thực một chủ sở hữu, băm PBKDF2, cookie HttpOnly/SameSite Strict, CSRF, khóa đăng ký sau tài khoản đầu tiên và chống brute force cơ bản. Khi đưa lên Internet cần HTTPS với `VIETFRAME_COOKIE_SECURE=true`, kiểm tra URL/redirect sâu hơn, chống SSRF toàn pipeline, giới hạn tác vụ/tải lên theo IP, backup database và file, giám sát chống lạm dụng, snapshot/restore và audit độc lập. Không chia sẻ tài khoản với nhiều người; dự án chưa tách biệt theo user. Docker expose local-only.
 
 ## API chính
 
