@@ -36,6 +36,10 @@ def init():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL)''')
+        cols = {r[1] for r in c.execute('PRAGMA table_info(owner_users)')}
+        if 'google_sub' not in cols:
+            c.execute('ALTER TABLE owner_users ADD COLUMN google_sub TEXT')
+        c.execute('CREATE UNIQUE INDEX IF NOT EXISTS owner_users_google_sub ON owner_users(google_sub)')
         c.execute('''CREATE TABLE IF NOT EXISTS auth_sessions (
             token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES owner_users(id) ON DELETE CASCADE,
             csrf TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)''')
@@ -98,6 +102,34 @@ def create_first_owner(email: str, password: str):
         cursor = c.execute('INSERT INTO owner_users(email,password_hash,created_at) VALUES(?,?,?)',
                            (address, digest, datetime.now(timezone.utc).isoformat()))
         return {'id': cursor.lastrowid, 'email': address}
+
+
+def google_owner(email: str, sub: str, *, allowed_email: str):
+    """Single-owner Google binding, atomic under concurrent callbacks.
+
+    A different Google subject can NEVER claim an already bound account,
+    even if it presents the same email string.
+    """
+    address = normalize_email(email)
+    if not hmac.compare_digest(address, normalize_email(allowed_email)) or not sub or len(sub) > 255:
+        raise PermissionError('Tài khoản Google không được phép đăng nhập.')
+    with _connection() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row = c.execute('SELECT id,email,google_sub FROM owner_users LIMIT 1').fetchone()
+        if row is None:
+            # Disable guessing/using a password for OAuth-first owners. An admin can
+            # choose a local password later using reset-owner-password offline.
+            password = hash_password(secrets.token_urlsafe(48))
+            cursor = c.execute('INSERT INTO owner_users(email,password_hash,created_at,google_sub) VALUES(?,?,?,?)',
+                               (address, password, datetime.now(timezone.utc).isoformat(), sub))
+            return {'id': cursor.lastrowid, 'email': address}
+        if not hmac.compare_digest(row['email'], address):
+            raise PermissionError('Email Google khác email chủ sở hữu đang lưu.')
+        if row['google_sub'] is None:
+            c.execute('UPDATE owner_users SET google_sub=? WHERE id=? AND google_sub IS NULL', (sub, row['id']))
+        elif not hmac.compare_digest(row['google_sub'], sub):
+            raise PermissionError('Tài khoản Google không khớp với tài khoản đã liên kết.')
+        return {'id': row['id'], 'email': row['email']}
 
 
 def _limiter_key(client_ip: str):
