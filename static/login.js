@@ -19,6 +19,16 @@ async function request(path, body) {
 async function initialize() {
   try {
     const config = await request('/api/auth/config');
+    const googleLink = el('google-login');
+    if (config.google_login_available) {
+      googleLink.classList.remove('disabled');
+      googleLink.removeAttribute('aria-disabled');
+      googleLink.removeAttribute('tabindex');
+      el('google-help').textContent = 'Dùng tài khoản Google đã được cấp quyền chủ sở hữu.';
+    } else {
+      googleLink.addEventListener('click', e => e.preventDefault());
+      el('google-help').textContent = 'Google chưa được cấu hình: cần Client ID và Client Secret ở Render.';
+    }
     creatingOwner = config.setup_required;
     if (creatingOwner) {
       el('form-category').textContent = 'THIẾT LẬP CHỦ SỞ HỮU';
@@ -63,4 +73,15 @@ el('auth-form').addEventListener('submit', async (event) => {
     submit.disabled = false;
   }
 });
-document.addEventListener('DOMContentLoaded', initialize);
+document.addEventListener('DOMContentLoaded', () => {
+  const codes = {
+    not_configured: 'Google chưa được cấu hình. Cần Client ID và Client Secret trong Render.',
+    invalid_state: 'Phiên Google không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.',
+    rejected: 'Google không xác minh được tài khoản chủ sở hữu. Kiểm tra email và ứng dụng OAuth.',
+    unavailable: 'Tạm thời không kết nối được Google. Vui lòng thử lại.',
+    cancelled: 'Bạn đã hủy đăng nhập Google.'
+  };
+  const code = new URLSearchParams(location.search).get('google_error');
+  if (code && codes[code]) message(codes[code]);
+  initialize();
+});
