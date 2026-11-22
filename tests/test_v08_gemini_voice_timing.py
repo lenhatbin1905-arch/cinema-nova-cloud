@@ -145,7 +145,12 @@ def test_voice_map_and_voice_text_sent_to_tts_once_per_segment(client,monkeypatc
     segments=[{'start':0.1,'end':1.05,'text':'Chào!','voice_text':'Xin chào!','speaker':'spk1'},
               {'start':1.2,'end':2.05,'text':'Tạm biệt!','voice_text':'Tạm biệt nhé!','speaker':'spk2'}]
     assert client.put(f'/api/projects/{pid}/segments',json={'segments':segments}).status_code==200
-    monkeypatch.setattr(eleven,'free_quota_available',lambda length:{'remaining':999,'required':length})
+    preflight_calls=[]
+    def free_preflight(ids,characters):
+        preflight_calls.append((ids,characters))
+        assert ids == ['default','alternative'] and characters > 0
+        return {'eligible':True,'tier':'free','remaining':999,'required':characters}
+    monkeypatch.setattr(eleven,'preflight_free_voices',free_preflight)
     calls=[]
     def synthesize(phrase,voice,path):
         calls.append((phrase,voice))
@@ -155,6 +160,7 @@ def test_voice_map_and_voice_text_sent_to_tts_once_per_segment(client,monkeypatc
     monkeypatch.setattr(eleven,'synthesize',synthesize)
     jobs.dubbing(pid,'default',provider='elevenlabs',voice_map={'spk2':'alternative'})
     assert calls==[('Xin chào!','default'),('Tạm biệt nhé!','alternative')]
+    assert len(preflight_calls)==1
     assert client.get(f'/api/projects/{pid}').json()['dub_file']=='dub.wav'
 
 
@@ -198,11 +204,17 @@ def test_voice_timing_report_endpoint_from_real_synthesis(client, monkeypatch):
     pid=up.json()['id']
     assert client.put(f'/api/projects/{pid}/segments',json={'segments':[
         {'start':0.15,'end':1.4,'text':'Xin chào','voice_text':'Chào anh','speaker':'spk1'}]}).status_code==200
-    monkeypatch.setattr(eleven,'free_quota_available',lambda length:None)
+    checks=[]
+    def approve(ids,characters):
+        checks.append((ids,characters))
+        assert ids == ['voice01'] and characters > 0
+        return {'eligible':True,'tier':'free','remaining':1000,'required':characters}
+    monkeypatch.setattr(eleven,'preflight_free_voices',approve)
     def fake_synthesize(phrase,voice,out):
         subprocess.run(['ffmpeg','-nostdin','-v','error','-y','-f','lavfi','-i','sine=frequency=490:duration=0.9','-ar','24000','-ac','2',str(out)],check=True,timeout=25)
     monkeypatch.setattr(eleven,'synthesize',fake_synthesize)
     jobs.dubbing(pid,'voice01',provider='elevenlabs')
+    assert len(checks)==1
     report=client.get(f'/api/projects/{pid}/voice-timing-report')
     assert report.status_code==200
     data=report.json()

@@ -88,7 +88,14 @@ def test_elevenlabs_audio_pipeline_mocked_not_quality_claim(client,monkeypatch):
     up=client.post('/api/projects/upload',data={'license_confirmed':'true'},files={'file':('film.mp4',io.BytesIO(fake_video()),'video/mp4')})
     pid=up.json()['id']
     client.put(f'/api/projects/{pid}/segments',json={'segments':[{'start':0.2,'end':1.8,'text':'Xin chào từ ElevenLabs.'}]})
-    monkeypatch.setattr(eleven,'free_quota_available',lambda characters:{'tier':'free','remaining':1000,'required':characters})
+    # Mock the full read-only Free voice preflight, not just quota:
+    # the production gate must run before starting audio and reject paid voices.
+    checks=[]
+    def approve_voice(ids,characters):
+        checks.append((ids,characters))
+        assert ids == ['abc123_456'] and characters > 0
+        return {'eligible':True,'tier':'free','remaining':1000,'required':characters}
+    monkeypatch.setattr(eleven,'preflight_free_voices',approve_voice)
     monkeypatch.setattr(eleven,'is_connected',lambda:{'connected':True,'label':'test'})
     def fake_synth(text,voice,filename):
         proc=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-f','lavfi','-i','sine=frequency=520:duration=0.9','-c:a','libmp3lame',str(filename)],capture_output=True,text=True,timeout=25)
