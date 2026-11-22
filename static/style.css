@@ -108,3 +108,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 #dub-voice option:disabled{color:#ad5149;background:#fff0ed}
 #voice-status{line-height:1.55;white-space:normal}
 .voice-free-warning{line-height:1.65}
+
+/* Click-and-drag original subtitle replacement, active only on demand. */
+.video-cleanup-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0 6px}
+.video-cleanup-toolbar .helper{flex:1;min-width:220px}
+#cleanup-draw-layer{position:absolute;inset:0;display:none;z-index:6;cursor:crosshair;touch-action:none;background:transparent}
+#cleanup-draw-layer.active{display:block;outline:2px dashed #e2ba56;outline-offset:-2px}
+#cleanup-draw-layer .drawing-rect{position:absolute;pointer-events:none;border:2px solid #ffe37b;background:#ffe37b2a;box-shadow:0 0 0 1px #174e3b}
+#mark-caption-region[aria-pressed="true"]{background:#dce8dc;outline:2px solid #286246}
+@media(max-width:640px){.video-cleanup-toolbar{align-items:stretch;flex-direction:column}.video-cleanup-toolbar .helper{min-width:0}}
