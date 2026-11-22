@@ -124,7 +124,7 @@ def _safe_file_name(name):
     return name
 
 
-def _upload(client, path: Path, key: str):
+def _upload(client, path: Path, key: str, progress=None):
     size = path.stat().st_size
     if not 1000 < size <= MAX_ANALYSIS_BYTES:
         raise ValueError('Gemini chỉ phân tích video từ 1KB đến 60MB trong bản Free-first.')
@@ -143,16 +143,18 @@ def _upload(client, path: Path, key: str):
     parsed = urlsplit(upload_url)
     if parsed.scheme != 'https' or parsed.netloc != 'generativelanguage.googleapis.com':
         raise ValueError('Gemini trả URL upload không thuộc máy chủ Google; đã chặn gửi video.')
+    if progress: progress(20, 'Gemini đã cấp phiên nhận video. Đang truyền tệp nguồn…')
     with path.open('rb') as f:
         done = client.post(upload_url, headers={'x-goog-api-key': key, 'X-Goog-Upload-Offset': '0',
             'X-Goog-Upload-Command': 'upload, finalize', 'Content-Length': str(size)}, content=f, timeout=140)
     _check_response(done)
+    if progress: progress(46, 'Đã tải video lên Gemini. Chờ Google xử lý âm thanh và hình ảnh…')
     file_info = done.json().get('file', {})
     name = _safe_file_name(file_info.get('name'))
     return name, mime, file_info.get('uri')
 
 
-def _wait_ready(client, key, name, *, seconds=80):
+def _wait_ready(client, key, name, *, seconds=80, progress=None):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         r = client.get('/v1beta/' + name, headers={'x-goog-api-key': key}, timeout=20)
@@ -160,6 +162,7 @@ def _wait_ready(client, key, name, *, seconds=80):
         info = r.json()
         state = str(info.get('state') or '').upper()
         if state == 'ACTIVE':
+            if progress: progress(67, 'Gemini đã xử lý video. Đang chuẩn bị tạo phụ đề Việt…')
             uri = str(info.get('uri') or '')
             if not uri.startswith('https://'):
                 raise ValueError('Gemini chưa trả URI video hợp lệ.')
@@ -212,25 +215,28 @@ def normalize_script(payload: dict, duration: float):
         'review_count': sum(bool(s.get('needs_review')) for s in verified)}
 
 
-def analyze_video(source: Path, duration: float):
+def analyze_video(source: Path, duration: float, progress=None):
     if not 0 < duration <= MAX_ANALYSIS_DURATION:
         raise ValueError('Bản Gemini Free-first chỉ phân tích tối đa 180 giây mỗi lượt.')
     if not source.is_file():
         raise ValueError('Video nguồn không tồn tại.')
     key, model = _key_model()
     remote_name = None
+    if progress: progress(11, 'Đang mở kết nối Gemini và chuẩn bị video gốc…')
     try:
         with httpx.Client(base_url=API, trust_env=False, timeout=30, follow_redirects=False) as client:
-            remote_name, mime, uri = _upload(client, source, key)
-            uri = _wait_ready(client, key, remote_name)
+            remote_name, mime, uri = _upload(client, source, key, progress=progress)
+            uri = _wait_ready(client, key, remote_name, progress=progress)
             prompt = PROMPT.replace('{duration:.2f}', f'{duration:.2f}')
             request = {
                 'contents': [{'parts': [{'fileData': {'mimeType': mime, 'fileUri': uri}}, {'text': prompt}]}],
                 'generationConfig': {'temperature': 0.15, 'maxOutputTokens': 5500,
                     'responseMimeType': 'application/json'}}
+            if progress: progress(74, 'Gemini đang nhận dạng lời nói, dịch và viết thoại Việt theo từng cảnh…')
             answer = client.post('/v1beta/models/' + model + ':generateContent',
                 headers={'x-goog-api-key': key}, json=request, timeout=120)
             _check_response(answer)
+            if progress: progress(91, 'Gemini đã trả kết quả. Đang kiểm tra mốc thời gian và câu thoại…')
             data = answer.json()
             candidates = data.get('candidates') or []
             parts = candidates[0].get('content', {}).get('parts', []) if candidates else []
@@ -241,7 +247,9 @@ def analyze_video(source: Path, duration: float):
                 script = json.loads(output)
             except json.JSONDecodeError as exc:
                 raise ValueError('Gemini trả JSON lỗi. Hãy thử đoạn video ngắn hơn.') from exc
-            return normalize_script(script, duration)
+            result=normalize_script(script, duration)
+            if progress: progress(97, 'Đã kiểm tra phụ đề. Đang lưu bản thoại vào dự án…')
+            return result
     except httpx.RequestError as exc:
         raise ValueError('Kết nối Gemini gián đoạn. Video chưa được phân tích xong.') from exc
     finally:

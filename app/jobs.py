@@ -54,7 +54,7 @@ def import_url(pid, url):
                 merge_output_format='mp4',noplaylist=True,playlistend=1,quiet=True,
                 no_warnings=True,max_filesize=config.MAX_UPLOAD_MB*1024*1024,
                 progress_hooks=[hook])
-    if shutil.which('node'):
+    if (shutil.which('node')):
         opts['js_runtimes'] = {'node': {}}
     try:
         with yt_dlp.YoutubeDL(opts) as yd:
@@ -104,7 +104,8 @@ def gemini_script(pid):
         raise RuntimeError('Thiếu video nguồn cần Gemini phân tích.')
     source=path_for(pid)/data['video_file']
     db.update(pid,status='analyzing',progress=10,message='Gemini đang nghe lời gốc và đối chiếu hình ảnh…')
-    report=gemini.analyze_video(source, data['duration'])
+    report=gemini.analyze_video(source, data['duration'], progress=lambda pct,msg: db.update(
+        pid,progress=pct,message=msg))
     if not report['segments']:
         raise RuntimeError('Không phát hiện lời nói rõ trong video; không tự tạo phụ đề giả.')
     (path_for(pid)/'gemini-script-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

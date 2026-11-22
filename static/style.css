@@ -59,3 +59,23 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .recovery-confirm input{accent-color:#335b44}
 .recovery-action{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;max-width:fit-content;padding:11px 15px}
 .recovery-action[aria-disabled="true"]{opacity:.46;cursor:not-allowed;pointer-events:none}
+
+
+/* v0.11 — accessible, server-confirmed processing milestones. No fake countdowns. */
+.job-progress{background:#f1f6f1;border:1px solid #d4e3d8;border-radius:10px;padding:15px;margin:0 0 16px;color:#304e3e}
+.job-progress-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:11px}
+.job-progress-head>div{display:grid;gap:3px}.job-kicker{font-size:9px;letter-spacing:1.6px;color:#7e9885;font-weight:800}
+#job-title{font-size:14px;line-height:1.4}.job-percent{font-size:23px;font-weight:850;white-space:nowrap;letter-spacing:-.8px;color:#37664c}
+.job-meter{height:11px;background:#dbe7dc;border-radius:999px;overflow:hidden}
+#job-meter-fill{height:100%;width:0;background:#4b8460;border-radius:999px;transition:width .3s ease}
+.job-steps{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
+.job-step{border:1px solid #d2dcd2;background:#fff;border-radius:6px;font-size:10px;color:#7d8b80;padding:5px 7px}
+.job-step.done{background:#e1eee5;border-color:#bcdac5;color:#376948}
+.job-step.current{background:#2e684a;color:#fff;border-color:#2e684a}
+#job-note{font-size:12px;color:#567061;line-height:1.65;margin:11px 0 0;overflow-wrap:anywhere}
+.job-progress.failed{background:#fff4ed;border-color:#e8bcaa}
+.job-progress.failed #job-title,.job-progress.failed #job-note,.job-progress.failed .job-percent{color:#9b4936}
+.job-progress.failed #job-meter-fill{background:#b76553}
+.job-progress.complete{background:#f3f8f5}
+@media (max-width:520px){.job-progress{padding:12px}.job-percent{font-size:20px}.job-steps{gap:5px}.job-step{font-size:9px;padding:5px}}
+@media(prefers-reduced-motion:reduce){#job-meter-fill{transition:none}}

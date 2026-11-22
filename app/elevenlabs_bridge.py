@@ -52,7 +52,11 @@ def _get_key():
 def is_connected():
     with sqlite3.connect(config.DB_PATH) as db:
         row = db.execute("SELECT account_label FROM provider_credentials WHERE provider='elevenlabs'").fetchone()
-    return {'connected': bool(row), 'label': row[0] if row else None}
+    result={'connected': bool(row), 'label': row[0] if row else None}
+    if row and 'quyền giới hạn' in row[0]:
+        result['limited']=True
+        result['warning']='Chỉ chọn được giọng. Cần User → Read để xác minh hạn mức Free trước khi tạo tiếng.'
+    return result
 
 
 def _request(method, path, key, **kwargs):
@@ -89,12 +93,29 @@ def link(api_key):
     api_key = api_key.strip()
     if not 16 <= len(api_key) <= 256 or any(ch.isspace() for ch in api_key):
         raise ValueError('API key ElevenLabs không hợp lệ.')
-    profile = _request('GET', '/v1/user', api_key).json()
-    label = str(profile.get('email') or profile.get('first_name') or 'ElevenLabs')[:120]
+    limited = False
+    try:
+        profile = _request('GET', '/v1/user', api_key).json()
+        label = str(profile.get('email') or profile.get('first_name') or 'ElevenLabs')[:120]
+    except ValueError as exc:
+        # A scoped API key may validly read voices but not user details. Verify an
+        # actual required capability before retaining it; invalid keys still fail.
+        try:
+            voices_data = _request('GET','/v2/voices',api_key,params={'page_size':1}).json()
+        except ValueError:
+            raise exc
+        if not isinstance(voices_data,dict) or not isinstance(voices_data.get('voices'),list):
+            raise ValueError('ElevenLabs chưa xác minh được quyền Voices → Read.') from exc
+        label = 'ElevenLabs (quyền giới hạn)'
+        limited = True
     encrypted = _fernet().encrypt(api_key.encode('utf-8'))
     with sqlite3.connect(config.DB_PATH) as db:
         db.execute("INSERT OR REPLACE INTO provider_credentials(provider, encrypted_key, account_label) VALUES ('elevenlabs', ?, ?)", (encrypted, label))
-    return {'connected': True, 'label': label}
+    result={'connected': True, 'label': label}
+    if limited:
+        result['limited']=True
+        result['warning']='Đã liên kết để chọn giọng. Cần bật thêm User → Read để xác minh hạn mức Free trước khi tạo tiếng; VietFrame sẽ chặn tạo tiếng cho đến khi có quyền.'
+    return result
 
 
 def disconnect():

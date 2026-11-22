@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 const state = { csrf: '', accountEmail: '', projects: [], selected: null, capabilities: null, polling: null, view: 'projects', preview: 'source', cleanupDraft: [], elevenlabsConnected: false };
 const statusText = { ready: 'Sẵn sàng', queued: 'Đang xếp hàng', downloading: 'Đang tải video', transcribing: 'Nhận dạng thoại', translating: 'Đang dịch', rendering: 'Đang xuất MP4', finishing: 'Đang tạo video hoàn chỉnh', analyzing: 'Gemini đang phân tích video', dubbing: 'Đang lồng tiếng', generating: 'Đang tạo AI', error: 'Có lỗi' };
-const ongoing = ['queued','downloading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing'];
+const ongoing = ['queued','downloading','uploading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing'];
 
 function toast(message, error=false) {
   const el = $('#toast'); el.textContent = message; el.className = error ? 'visible error' : 'visible';
@@ -149,6 +149,42 @@ function updateCaptionOverlay(){
   overlay.textContent=active.text;
 }
 
+const jobPhases = {
+  analyzing: ['Gửi video','Gemini xử lý','Viết phụ đề Việt','Kiểm tra câu thoại'],
+  downloading: ['Xác minh nguồn','Tải video','Kiểm tra MP4'],
+  dubbing: ['Kiểm tra hạn mức','Tạo giọng từng câu','Căn chỉnh âm thanh'],
+  finishing: ['Chuẩn bị âm thanh','Lồng tiếng','Xuất MP4'],
+  rendering: ['Chuẩn bị phụ đề','FFmpeg xuất MP4','Kiểm tra tệp'],
+  uploading: ['Nhận tệp thay thế','Kiểm tra video'],
+  transcribing: ['Nhận dạng âm thanh','Kiểm tra phụ đề'],
+  translating: ['Dịch lời thoại','Kiểm tra phụ đề'],
+  generating: ['Kiểm tra GPU','Tạo video'],
+  queued: ['Xếp hàng','Đang xử lý']
+};
+function renderJobProgress(project) {
+  const panel=$('#job-progress');
+  if (!project) {panel.classList.add('hidden');return;}
+  panel.classList.remove('hidden');
+  const active=ongoing.includes(project.status),failed=project.status==='error';
+  const percent=failed?0:active?Math.max(0,Math.min(99,Number(project.progress)||0)):100;
+  const name=failed?'Tác vụ đã dừng vì lỗi':active?(statusText[project.status]||'Đang xử lý'):'Đã hoàn thành bước xử lý';
+  text($('#job-title'),name);
+  text($('#job-percent'),failed?'Có lỗi':percent+'%');
+  panel.classList.toggle('failed',failed);
+  panel.classList.toggle('complete',!active&&!failed);
+  const meter=$('#job-meter');
+  meter.setAttribute('aria-valuenow',String(percent));
+  meter.setAttribute('aria-valuetext',failed?'Tác vụ đã lỗi':active?'Đã tới mốc công việc '+percent+' phần trăm':'Sẵn sàng');
+  $('#job-meter-fill').style.width=percent+'%';
+  const steps=$('#job-steps');steps.replaceChildren();
+  const items=jobPhases[project.status]||(failed?['Đã dừng']:['Sẵn sàng chỉnh sửa']);
+  // The milestones correspond to server-confirmed actions; never animate fabricated completion.
+  const current=project.status==='analyzing'?(percent>=91?3:percent>=67?2:percent>=46?1:0):
+    active?(percent>=90?items.length-1:percent>=55?Math.min(1,items.length-1):0):0;
+  items.forEach((name,i)=>{if(!name)return;const chip=document.createElement('span');chip.className='job-step'+(i<current?' done':i===current?' current':'');chip.textContent=(i<current?'✓ ':i===current&&active?'● ':'○ ')+name;steps.append(chip);});
+  text($('#job-note'),project.message||(active?'Máy chủ đang xử lý video…':'Chọn thao tác tiếp theo.'));
+  if(active){$('#job-percent').setAttribute('title','Phần trăm biểu thị mốc đã đạt, không phải thời gian còn lại.');}
+}
 function showProject(p) {
   $('#project-select').value = p?.id || '';
   const playingExport = state.preview==='export' && !!p?.export_url;
@@ -165,6 +201,7 @@ function showProject(p) {
   text($('#project-status'),p ? (statusText[p.status]||p.status):'Chưa chọn');
   text($('#project-message'),p ? `${p.message || 'Video đã được nạp.'}  ${ongoing.includes(p.status) ? `(${p.progress}%)` : ''}` : 'Chọn một dự án để thao tác.');
   $('#progress-bar').style.width = `${p?.progress||0}%`;
+  renderJobProgress(p);
   $('#download-export').classList.toggle('hidden', !p?.export_url);
   $('#download-srt').classList.toggle('hidden', !p?.segments?.length);
   $('#dub-preview').classList.toggle('hidden', !p?.dub_url);
@@ -174,6 +211,7 @@ function showProject(p) {
   $('#voice-report').classList.toggle('hidden',!p?.dub_file);
   if(p?.dub_file) $('#voice-report').href=`/api/projects/${p.id}/voice-timing-report`;
   const editable=p?.status==='ready';
+  $('#gemini-prerequisite').classList.toggle('hidden',!!p?.video_url);
   ['render-button','complete-video-button','gemini-script-button','save-segments','transcribe','translate','add-segment'].forEach(id => $(`#${id}`).disabled = !editable);
   $('#dub-button').disabled=!editable||$('#voice-provider').value==='original'||!$('#dub-voice').value;
   state.cleanupDraft = p?.cleanup_regions?.map(r=>({...r})) || [];
@@ -372,13 +410,13 @@ function refreshSpeakerVoices(){
 
 async function loadElevenStatus(){
  try{const s=await request('/api/integrations/elevenlabs');state.elevenlabsConnected=s.connected;
-  text($('#elevenlabs-status'),s.connected?'Đã liên kết · '+(s.label||'ElevenLabs')+' (key không được hiển thị)':'Chưa liên kết. Cần API key một lần.');
+  text($('#elevenlabs-status'),s.limited?(s.warning||'Đã liên kết giới hạn; cần quyền User → Read để tạo giọng.'):s.connected?'Đã liên kết · '+(s.label||'ElevenLabs')+' (key không được hiển thị)':'Chưa liên kết. Cần API key một lần.');
   $('#elevenlabs-disconnect').disabled=!s.connected;
  }catch(e){text($('#elevenlabs-status'),e.message);}
 }
 async function linkEleven(event){
  event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
- try{await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';toast('Đã liên kết ElevenLabs an toàn.');await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();}
+ try{const result=await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();if(result.warning){text($('#elevenlabs-status'),result.warning);toast('ElevenLabs đã liên kết có giới hạn: cần quyền User Read để tạo giọng.',true);}else{toast('Đã liên kết ElevenLabs an toàn.');}}
  catch(e){text($('#elevenlabs-status'), 'Không thể liên kết: '+e.message);showError(e);}finally{input.value='';button.disabled=false;}
 }
 async function unlinkEleven(){
@@ -429,7 +467,7 @@ async function refreshCurrent(){
     state.selected=p;const changed=JSON.stringify(p.segments)!==JSON.stringify(prev.segments) || p.export_url!==prev.export_url || p.video_url!==prev.video_url;
     // Do not discard unsaved edits on each poll. Only rerender segment fields when a job changes their data.
     if(changed || p.status==='ready'&&prev.status!==p.status) showProject(p);
-    else {text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
+    else {text($('#project-status'),statusText[p.status]||p.status);text($('#project-message'),`${p.message||''} ${ongoing.includes(p.status)?'('+p.progress+'%)':''}`);$('#progress-bar').style.width=p.progress+'%';renderJobProgress(p);$('#download-export').classList.toggle('hidden',!p.export_url);if(p.export_url)$('#download-export').href=p.export_url;}
     if(prev.status!==p.status&&p.status==='error')toast(p.message,true);
     if(prev.status!==p.status&&p.status==='ready')toast(p.message||'Đã xử lý xong.');
     managePolling();

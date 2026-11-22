@@ -101,7 +101,7 @@ def test_gemini_script_queued_and_speaker_fields_saved(client,monkeypatch):
     monkeypatch.setattr(gemini,'status',lambda:{'connected':True})
     # Do not call external API. Validate queue and job persistence with a deterministic stub.
     monkeypatch.setattr(jobs,'submit',lambda pid,fn,*args:fn(pid,*args))
-    monkeypatch.setattr(gemini,'analyze_video',lambda source,duration:gemini.normalize_script(samples(),duration))
+    monkeypatch.setattr(gemini,'analyze_video',lambda source,duration,progress=None:gemini.normalize_script(samples(),duration))
     r=client.post(f'/api/projects/{pid}/gemini-script',json={})
     assert r.status_code==202,r.text
     p=client.get(f'/api/projects/{pid}').json()
