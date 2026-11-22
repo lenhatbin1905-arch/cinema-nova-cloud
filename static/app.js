@@ -126,27 +126,77 @@ async function selectProject(pid) {
   try { state.preview='source';state.selected=await request('/api/projects/'+pid); showProject(state.selected);switchView('editor');managePolling(); }
   catch(e) {showError(e);}
 }
+function previewWordPop(text,start,end,now){
+  const words=String(text||'').replace(/\n/g,' ').trim().split(/\s+/).filter(Boolean);
+  if(!words.length)return '';
+  const duration=end-start;
+  const target=Math.max(1,Math.min(words.length,Math.floor(duration/0.32+0.5)));
+  const groups=[];
+  for(let i=0;i<target;i++){
+    const lo=Math.round(i*words.length/target),hi=Math.round((i+1)*words.length/target);
+    if(hi>lo)groups.push(words.slice(lo,hi).join(' '));
+  }
+  const weights=groups.map(g=>Math.pow(Math.max(1,g.replace(/\s/g,'').length),0.45));
+  const total=weights.reduce((a,b)=>a+b,0);
+  let elapsed=0;
+  for(let i=0;i<groups.length;i++){
+    const next=elapsed+weights[i]/total*duration;
+    if(now<start+next || i===groups.length-1)return groups[i];
+    elapsed=next;
+  }
+  return groups[groups.length-1]||'';
+}
+function subtitleReplacementRegion(cue) {
+  const regions=(state.cleanupDraft||[]).filter(r=>r.purpose==='subtitle');
+  const overlaps=regions.map(r=>{
+    const a=Number(r.start??cue.start),b=Number(r.end??cue.end);
+    return {r,score:Math.max(0,Math.min(b,cue.end)-Math.max(a,cue.start))};
+  }).filter(x=>x.score>0);
+  overlaps.sort((a,b)=>b.score-a.score);
+  return overlaps[0]?.r||null;
+}
 function updateCaptionOverlay(){
-  const overlay=$('#caption-overlay');
-  const player=$('#player');
-  if (!state.selected || !player.videoWidth || (state.preview==='export' && !!state.selected.export_url)) {overlay.textContent='';return;}
-  let active=null;
-  try { active=collectSegments().find(seg=>Number.isFinite(seg.start)&&Number.isFinite(seg.end)&&
-    seg.start<=player.currentTime && seg.end>player.currentTime && seg.text); }
-  catch { overlay.textContent='';return; }
-  if (!active) {overlay.textContent='';return;}
-  const style=currentStyle();
-  const box=player.getBoundingClientRect(),screen=$('.screen').getBoundingClientRect();
-  const scale=Math.min(box.width/player.videoWidth,box.height/player.videoHeight);
-  const visibleHeight=player.videoHeight*scale;
-  overlay.style.bottom=(Math.max(0,(screen.height-visibleHeight)/2) + Math.max(0,style.margin_v)*scale)+'px';
+  const overlay=$('#caption-overlay'),player=$('#player');
+  if(!state.selected||!player.videoWidth||(state.preview==='export'&&!!state.selected.export_url)){
+    overlay.textContent='';return;
+  }
+  let cue=null;
+  try{cue=collectSegments().find(seg=>Number.isFinite(seg.start)&&Number.isFinite(seg.end)
+      &&seg.start<=player.currentTime&&seg.end>player.currentTime&&seg.text);}
+  catch{overlay.textContent='';return;}
+  if(!cue){overlay.textContent='';return;}
+  const style=currentStyle(),screen=$('.screen').getBoundingClientRect();
+  const videoBox=player.getBoundingClientRect();
+  const scale=Math.min(videoBox.width/player.videoWidth,videoBox.height/player.videoHeight);
+  const viewW=player.videoWidth*scale,viewH=player.videoHeight*scale;
+  const offsetX=videoBox.left-screen.left+(videoBox.width-viewW)/2;
+  const offsetY=videoBox.top-screen.top+(videoBox.height-viewH)/2;
+  const region=subtitleReplacementRegion(cue);
+  overlay.style.position='absolute';
   overlay.style.fontSize=Math.max(10,style.font_size*scale)+'px';
   overlay.style.fontWeight=style.bold?'800':'400';
   overlay.style.fontFamily='"'+style.font.replace(/"/g,'')+'",sans-serif';
   overlay.style.color=style.color;
   overlay.style.webkitTextStroke=Math.min(7,style.outline*scale)+'px '+style.outline_color;
   overlay.style.paintOrder='stroke fill';
-  overlay.textContent=active.text;
+  if(region){
+    // Exactly the rectangle the backend uses for the ASS {\an5\pos(x,y)}.
+    overlay.style.left=(offsetX+region.x*viewW/100)+'px';
+    overlay.style.top=(offsetY+region.y*viewH/100)+'px';
+    overlay.style.width=(region.w*viewW/100)+'px';
+    overlay.style.height=(region.h*viewH/100)+'px';
+    overlay.style.right='auto';overlay.style.bottom='auto';
+    overlay.style.display='flex';overlay.style.alignItems='center';
+    overlay.style.justifyContent='center';overlay.style.textAlign='center';
+  }else{
+    overlay.style.left='5%';overlay.style.right='5%';
+    overlay.style.width='auto';overlay.style.height='auto';
+    overlay.style.top='auto';
+    overlay.style.bottom=(Math.max(0,(screen.height-viewH)/2)+Math.max(0,style.margin_v)*scale)+'px';
+    overlay.style.display='block';
+  }
+  overlay.textContent=style.caption_mode==='word_pop'
+    ?previewWordPop(cue.text,cue.start,cue.end,player.currentTime):cue.text;
 }
 
 const jobPhases = {
@@ -678,9 +728,9 @@ function init(){
   $$('.seg-tab').forEach(btn=>btn.addEventListener('click',()=>{ $$('.seg-tab').forEach(x=>x.classList.toggle('active',x===btn));$('#edit-captions').classList.toggle('hidden',btn.dataset.editTab!=='captions');$('#edit-style').classList.toggle('hidden',btn.dataset.editTab!=='style');$('#edit-cleanup').classList.toggle('hidden',btn.dataset.editTab!=='cleanup'); }));
   ['style-font','style-size','style-color','style-outline-color','style-margin','style-bold'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateStylePreview();updateCaptionOverlay();}));
   $('#segments').addEventListener('input',updateCaptionOverlay);
-  $('#player').addEventListener('timeupdate',updateCaptionOverlay);
+  $('#player').addEventListener('timeupdate',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#player').addEventListener('loadedmetadata',()=>{updateCaptionOverlay();updateCleanupOverlay();});
-  $('#player').addEventListener('seeked',updateCaptionOverlay);
+  $('#player').addEventListener('seeked',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   window.addEventListener('resize',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
