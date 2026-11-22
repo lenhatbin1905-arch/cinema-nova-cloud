@@ -227,11 +227,11 @@ async function loadElevenStatus(){
 }
 async function linkEleven(event){
  event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
- try{await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';toast('Đã liên kết ElevenLabs an toàn.');await loadElevenStatus();await loadVoices();}
+ try{await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';toast('Đã liên kết ElevenLabs an toàn.');await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();}
  catch(e){showError(e);}finally{input.value='';button.disabled=false;}
 }
 async function unlinkEleven(){
- try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();await loadVoices();}catch(e){showError(e);}
+ try{await request('/api/integrations/elevenlabs',{method:'DELETE'});toast('Đã ngắt ElevenLabs.');await loadElevenStatus();$('#voice-provider').value='kokoro';await loadVoices();}catch(e){showError(e);}
 }
 function updateCleanupOverlay(){
  const mask=$('#cleanup-overlay'),player=$('#player'),screen=$('.screen');
@@ -368,6 +368,6 @@ function init(){
   window.addEventListener('resize',()=>{updateCaptionOverlay();updateCleanupOverlay();});
   $('#refresh-capabilities').addEventListener('click',loadCapabilities);
   $('#ai-generate').addEventListener('click',generateAI);
-  updateStylePreview();loadProjects();loadCapabilities();
+  updateStylePreview();loadProjects();(async()=>{await loadElevenStatus();if(state.elevenlabsConnected)$('#voice-provider').value='elevenlabs';await loadCapabilities();})();
 }
 document.addEventListener('DOMContentLoaded',authorize);
