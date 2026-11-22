@@ -148,6 +148,7 @@ def test_changing_voice_or_text_invalidates_tts_cache(client,monkeypatch):
     pid=_new_project(client)
     produced,_=_mock_tts(monkeypatch,1.6)
     jobs.dubbing(pid,'voice01',provider='elevenlabs')
+    monkeypatch.setattr(eleven,'preflight_free_voices',lambda ids,characters: {'eligible': True})
     jobs.dubbing(pid,'voice02',provider='elevenlabs')
     assert len(produced)==2, 'A different voice must create different audio'
     assert produced[0][1]=='voice01' and produced[1][1]=='voice02'
