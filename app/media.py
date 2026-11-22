@@ -53,7 +53,10 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
         meta=probe(source)
     except (ValueError, RuntimeError) as exc:
         raise RuntimeError('Không đọc được nguồn video hợp lệ trước khi xuất.') from exc
-    video=next(s for s in meta['streams'] if s.get('codec_type') == 'video')
+    # Glyph inpaint may downscale to fit Render Free; calculate filter pixels
+    # from the processed video, not the original source resolution.
+    actual=probe(video_input) if use_glyph else meta
+    video=next(s for s in actual['streams'] if s.get('codec_type') == 'video')
     filters=filter_chain(regions, int(video['width']), int(video['height']))
     filters.append(f'ass={ass.name}')
     cmd += ['-vf', ','.join(filters), '-map', '0:v:0']
