@@ -28,7 +28,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.15.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.16.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
@@ -238,7 +238,7 @@ def update_password(request: Request, body: ChangePassword):
 @app.get('/api/health')
 def health():
     from . import credential_store
-    return {'status':'ok','version':'0.15.0','mode':'local-first',
+    return {'status':'ok','version':'0.16.0','mode':'local-first',
             'persistent_credentials':credential_store.persistent(),
             'persistent_sessions':credential_store.persistent(),
             'remember_login_days':auth.SESSION_TTL//86400}
@@ -667,7 +667,9 @@ def voice_timing_report(pid: str):
         raise HTTPException(404,'Chưa có báo cáo căn thời gian giọng đọc.')
     data=json.loads(report.read_text(encoding='utf-8'))
     return {'segments':data,'all_within_limit':all(s['timing_ok'] for s in data),
-            'max_speed_factor':max((s['speed_factor'] for s in data),default=1.0)}
+            'max_speed_factor':max((s['speed_factor'] for s in data),default=1.0),
+            'quality_warning_count':sum(bool(s.get('quality_warning')) for s in data),
+            'auto_fitted':True}
 
 
 @app.get('/api/projects/{pid}/subtitles.srt')

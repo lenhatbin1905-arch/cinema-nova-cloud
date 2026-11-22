@@ -1,6 +1,7 @@
 """Actual asynchronous media processing, local worker. No fake progress/success."""
 import json
 import logging
+import math
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,25 @@ from . import engines, elevenlabs_bridge as eleven, gemini_bridge as gemini
 
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='vietframe-media')
 logger = logging.getLogger('vietframe.jobs')
+
+# Voice length varies by model, speaker and punctuation. A hard limit of 1.35x
+# prematurely failed otherwise valid video projects *after spending TTS quota*.
+# FFmpeg atempo preserves pitch and can safely time-fit the observed 1.60x case.
+QUALITY_WARNING_TEMPO = 1.35
+MAX_AUTO_TEMPO = 3.0  # Beyond this, a human rewrite is more intelligible.
+
+
+def tempo_filter(rate):
+    """Pitch-preserving FFmpeg filter; factors <=2 avoid atempo sample skipping.
+
+    Do not silently crop any speech. High ratios are flagged in the report.
+    """
+    if not math.isfinite(rate) or rate < 1.0:
+        raise ValueError('Tốc độ căn tiếng không hợp lệ.')
+    count=max(1,math.ceil(math.log2(rate)))
+    factor=rate ** (1.0/count)
+    return ','.join(f'atempo={factor:.6f}' for _ in range(count))
+
 
 
 def submit(pid, fn, *args):
@@ -176,25 +196,42 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
             eleven.synthesize(speak, chosen_voice, raw)
         else:
             engines.kokoro_synthesize(speak,chosen_voice,raw)
-        # Each utterance is placed on its own fixed timeline; fail on extreme speed-up
-        # instead of cropping the end of a sentence silently.
+        # Measure the actual TTS waveform rather than guessing duration from
+        # text length. Keep every spoken word; time-stretch with pitch preservation.
         from subprocess import run
         duration_result=run(['ffprobe','-v','error','-show_entries','format=duration',
                              '-of','default=nk=1:nw=1',str(raw)],capture_output=True,text=True,timeout=25)
         if duration_result.returncode:
             raise RuntimeError('Giọng TTS trả âm thanh không đọc được.')
-        sound_duration=float(duration_result.stdout.strip())
+        try:
+            sound_duration=float(duration_result.stdout.strip())
+        except ValueError as exc:
+            raise RuntimeError('Không đo được thời lượng tiếng nói ElevenLabs.') from exc
+        if not math.isfinite(sound_duration) or sound_duration<=0:
+            raise RuntimeError('Thời lượng âm thanh TTS không hợp lệ.')
         slot=seg['end']-seg['start']
         rate=max(1.0,sound_duration/slot)
+        quality_warning=rate>QUALITY_WARNING_TEMPO
+        within_limit=rate<=MAX_AUTO_TEMPO
         timing_report.append({'index':index+1,'speaker':seg.get('speaker','spk1'),
             'start':seg['start'],'end':seg['end'],'voice_id':chosen_voice,
             'slot_seconds':round(slot,3),'raw_audio_seconds':round(sound_duration,3),
-            'speed_factor':round(rate,3),'speech_text':speak,'timing_ok':rate<=1.35})
-        if rate>1.35:
-            (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
-            raise RuntimeError(f'Câu {index+1} dài quá thời gian cho phép ({rate:.2f}x). Hãy rút ngắn câu dịch hoặc tăng thời lượng đoạn.')
+            'speed_factor':round(rate,3),'speech_text':speak,
+            'timing_ok':within_limit,'quality_warning':quality_warning,
+            'note':('Đã tự căn nhanh để giữ đủ lời thoại; hãy nghe lại độ tự nhiên.'
+                    if quality_warning and within_limit else
+                    'Câu quá dài, cần rút gọn lời thoại hoặc nới thời gian.'
+                    if not within_limit else '')})
+        if not within_limit:
+            (folder/'voice-timing-report.json').write_text(
+                json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
+            raise RuntimeError(
+                f'Câu {index+1} cần tăng tốc {rate:.2f}x, vượt ngưỡng chất lượng '
+                f'{MAX_AUTO_TEMPO:.1f}x. Hãy rút gọn riêng ô "Thoại cho ElevenLabs" '
+                'hoặc nới thời gian đoạn; phụ đề đã lưu và video gốc vẫn còn.')
         start_ms=round(seg['start']*1000)
-        filter=f'atempo={rate:.5f},apad,atrim=duration={slot:.3f},adelay={start_ms}|{start_ms}'
+        filters=tempo_filter(rate)
+        filter=f'{filters},apad,atrim=duration={slot:.3f},adelay={start_ms}|{start_ms}'
         cmd=['ffmpeg','-nostdin','-hide_banner','-v','error','-y','-i',str(raw),'-af',filter,
              '-ar','24000','-ac','2',str(processed)]
         converted=run(cmd,capture_output=True,text=True,timeout=180)
@@ -202,7 +239,9 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
             raise RuntimeError('Căn thời gian thoại thất bại: '+converted.stderr[-320:])
         prepared.append(processed)
         db.update(pid,progress=5+int(80*(index+1)/len(segments)),
-                  message=f'Đã tạo giọng {index+1}/{len(segments)} câu…')
+                  message=(f'Đã căn giọng {index+1}/{len(segments)} câu'
+                           + (f' · tăng tốc {rate:.2f}x, cần nghe lại' if quality_warning else '')
+                           + '…'))
     if not prepared:
         raise RuntimeError('Không có câu để tạo giọng.')
     combined=folder/'dub.wav'
@@ -218,8 +257,11 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     (folder/'voice-timing-report.json').write_text(json.dumps(timing_report,ensure_ascii=False,indent=2),encoding='utf-8')
     for file in list(folder.glob('voice-*.wav'))+list(folder.glob('voice-align-*.wav'))+list(folder.glob('voice-*.mp3')):
         file.unlink(missing_ok=True)
+    warnings=sum(bool(c['quality_warning']) for c in timing_report)
+    info=f' · {warnings} câu đã tăng tốc để khớp hình, cần nghe lại' if warnings else ''
     db.update(pid,dub_file='dub.wav',output_file=None,status='rendering' if one_click else 'ready',progress=90 if one_click else 100,
-              message='Đã đồng bộ giọng theo câu, đang xuất MP4…' if one_click else 'Đã lồng tiếng xong. Xuất MP4 để ghép giọng với hình.')
+              message=('Đã căn giọng theo câu, đang xuất MP4'+info+'…'
+                       if one_click else 'Đã lồng tiếng xong'+info+'. Có thể xuất MP4.'))
 
 
 def complete_video(pid, style, voice_provider='original', voice=None, voice_map=None):
@@ -234,3 +276,10 @@ def complete_video(pid, style, voice_provider='original', voice=None, voice_map=
         raise ValueError('Chưa chọn giọng hợp lệ để lồng tiếng.')
     dubbing(pid, voice, voice_provider, one_click=True, voice_map=voice_map)
     render(pid, style, use_dub=True, one_click=True)
+    # Preserve honest quality warnings after the final video render updates status.
+    report_path=path_for(pid)/'voice-timing-report.json'
+    if report_path.is_file():
+        report=json.loads(report_path.read_text(encoding='utf-8'))
+        warned=sum(bool(c.get('quality_warning')) for c in report)
+        if warned:
+            db.update(pid,message=f'Đã xuất MP4. {warned} câu được tự tăng tốc để khớp hình; hãy nghe lại trước khi đăng.')
