@@ -227,7 +227,7 @@ def render(pid, style, *, use_dub=True, one_click=False):
     metadata = probe(source)
     video_stream = next(s for s in metadata['streams'] if s.get('codec_type') == 'video')
     resolution = (int(video_stream['width']), int(video_stream['height']))
-    ass.write_text(make_ass(segments,style,resolution=resolution),encoding='utf-8-sig')
+    ass.write_text(make_ass(segments,style,resolution=resolution,cleanup_regions=data.get('cleanup_regions', [])),encoding='utf-8-sig')
     (folder/'subtitles.srt').write_text(make_srt(segments),encoding='utf-8-sig')
     output=folder/'export.mp4'
     db.update(pid,status='rendering',progress=92 if one_click else 10,message='FFmpeg đang ghép chữ, hình và âm thanh thành MP4…')
