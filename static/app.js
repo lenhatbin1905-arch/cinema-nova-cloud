@@ -196,6 +196,9 @@ function showProject(p) {
   $('#show-source').classList.toggle('active',!playingExport);
   $('#show-export').classList.toggle('active',playingExport);
   $('#recover-current').classList.toggle('hidden',p?.status!=='error' || !p?.video_url);
+  const canRetryOriginal=!!p?.video_url && p?.status==='error' &&
+    /ElevenLabs|HTTP 402|voice|giọng/i.test(p?.message||'');
+  $('#video-recovery-actions').classList.toggle('hidden',!canRetryOriginal);
   $('#import-recovery').classList.toggle('hidden',!(p?.status==='error' && !p?.video_url));
   if (!p) {$('#player').removeAttribute('src');$('#player').load();}
   text($('#project-status'),p ? (statusText[p.status]||p.status):'Chưa chọn');
@@ -276,6 +279,23 @@ function collectVoiceMap(){
     if(voice)map[row.dataset.speaker]=voice;
   }
   return map;
+}
+async function retryWithOriginalAudio(){
+  if(!state.selected || state.selected.status!=='error' || !state.selected.video_url){
+    return showError(new Error('Chỉ khôi phục được dự án lỗi còn video nguồn.'));
+  }
+  if(!window.confirm('Xuất video bằng âm thanh gốc thay cho giọng ElevenLabs? Phụ đề và vùng xử lý chữ vẫn được giữ.'))return;
+  const button=$('#retry-original-audio');
+  button.disabled=true;
+  try{
+    const p=await apiPost('/api/projects/'+state.selected.id+'/recover',{});
+    state.selected=p;
+    $('#voice-provider').value='original';
+    await loadVoices();
+    showProject(p);
+    await loadProjects();
+    await completeVideo();
+  }catch(e){showError(e);}finally{button.disabled=false;}
 }
 async function completeVideo(){
   const button=$('#complete-video-button');
@@ -403,7 +423,11 @@ async function loadVoices(){
       const vietnamese=voices.filter(v=>{const name=String(v.name||v.label||'');const lang=String(v.language||v.lang||'');const id=String(v.id||v.voice_id||'');return /vietnam|tiếng việt|\bvi\b|^vi[_-]/i.test(name+' '+lang+' '+id)});
       voices=vietnamese.length?vietnamese:voices;
     }
-    for(const item of voices){const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');if(!val)continue;const o=document.createElement('option');o.value=val;o.textContent=typeof item==='string'?item:(item.name||item.label||val);select.append(o);}
+    for(const item of voices){const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');if(!val)continue;const o=document.createElement('option');o.value=val;
+      const type=String(item?.category||'').toLowerCase();
+      const restricted=/professional|famous|library/.test(type);
+      o.textContent=typeof item==='string'?item:(item.name||item.label||val)+(restricted?' · có thể yêu cầu gói trả phí':'');
+      select.append(o);}
     if(voices.length){select.removeChild(fallback);text($('#voice-status'),provider==='elevenlabs'?'✓ ElevenLabs đã kết nối · '+voices.length+' giọng khả dụng':voices.length+' giọng khả dụng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
     else{text($('#voice-status'),'Không có giọng khả dụng trên gói API này');}
   }catch(e){text($('#voice-status'),e.message);$('#dub-button').disabled=true;}
@@ -573,6 +597,7 @@ function init(){
   $('#save-segments').addEventListener('click',()=>saveSegments().catch(showError));
   $('#render-button').addEventListener('click',renderVideo);
   $('#complete-video-button').addEventListener('click',completeVideo);
+  $('#retry-original-audio').addEventListener('click',retryWithOriginalAudio);
   $('#open-eleven-settings').addEventListener('click',()=>{switchView('settings');$('#elevenlabs-api-key').focus();});
   $('#video-url').addEventListener('input',detectLinkPlatform);
   $('#transcribe').addEventListener('click',transcribe);

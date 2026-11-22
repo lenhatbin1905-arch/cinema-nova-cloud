@@ -174,3 +174,8 @@ Model Gemini 2.5 Flash có thể trả metadata HTTP 200 nhưng generation HTTP 
 ## 2026-11-22 — Ghi nhớ đăng nhập Google
 
 Trên Render, email Google được liên kết với một chủ sở hữu trong Neon; phiên HttpOnly, Secure và CSRF được giữ dưới dạng mã băm và tự gia hạn tối đa một lần/ngày khi sử dụng. Cookie có thời hạn 180 ngày, có đăng xuất thủ công, và đổi mật khẩu thu hồi các phiên. Xóa cookie, mở trình duyệt ẩn danh, thu hồi phiên, hoặc sự cố an ninh vẫn yêu cầu đăng nhập lại. Sau lần chuyển từ SQLite tạm sang Neon, người dùng đăng nhập Google lại **một lần** để tạo tài khoản trong kho bền vững, còn API key Gemini và ElevenLabs trong Neon vẫn được giữ nguyên.
+
+
+## ElevenLabs lỗi 402 khi tạo video (2026-11-22)
+
+Bản vá đọc JSON lỗi thật từ HTTP streaming của ElevenLabs, phân biệt giọng thư viện không được phép trên Free, hết credit, thiếu tính năng hoặc mất quyền TTS. API key đã lưu trong Neon, không bắt nhập lại. Không tự đổi giọng hoặc trả tiền. Khi xuất bị 402 và dự án còn video gốc, nút **Xuất MP4 với âm thanh gốc** chủ động khôi phục và xuất lại mà không gọi ElevenLabs; phụ đề/đồ họa đã lưu được giữ nguyên. Giọng từ thư viện có thể được liệt kê qua Voices API nhưng bị từ chối trong TTS Free; việc hiện danh sách giọng không bảo đảm được phép tạo tiếng.

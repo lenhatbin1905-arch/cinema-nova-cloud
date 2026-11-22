@@ -93,3 +93,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .integration-connection[data-state="error"] .integration-check{background:#aa5145;color:white;border-color:#aa5145}
 .integration-connection[data-state="disconnected"]{background:#f6f7f5;border-color:#dfe5dd;color:#566259}
 @media(max-width:760px){.integration-connection{padding:12px;gap:10px}.integration-connection strong{font-size:13px}}
+
+/* Failed ElevenLabs TTS gets an explicit user-controlled original-audio route. */
+.video-recovery-actions{display:grid;gap:9px;margin:12px 0 2px;padding:13px;background:#fffdfa;border:1px solid #e8d7bd;border-radius:8px}
+.video-recovery-actions .secondary-btn{width:fit-content;max-width:100%;white-space:normal;text-align:center}
+.video-recovery-actions p{font-size:11px;line-height:1.55;margin:0;color:#75654d}
+.voice-free-warning{border-left:3px solid #c7ae75;padding-left:11px}

@@ -128,7 +128,9 @@ def voices():
     key = _require_key()
     data = _request('GET', '/v2/voices', key, params={'page_size': 100}).json()
     result = data.get('voices', [])
-    return [{'id': str(v['voice_id']), 'name': str(v.get('name') or v['voice_id'])}
+    return [{'id': str(v['voice_id']),
+             'name': str(v.get('name') or v['voice_id']),
+             'category': str(v.get('category') or '')[:60]}
             for v in result if isinstance(v, dict) and v.get('voice_id')]
 
 
@@ -150,6 +152,45 @@ def free_quota_available(characters):
     return {'remaining': remaining, 'required': characters, 'tier': tier}
 
 
+def _tts_failure(response):
+    """Read ElevenLabs error details on a failed stream without leaking API keys.
+
+    HTTP 402 is a provider billing/voice restriction, not an invalid Gemini key.
+    Never retry an 402 with a paid model, and never silently replace a voice.
+    """
+    status=response.status_code
+    code=''
+    reason=''
+    try:
+        response.read()
+        body=response.json()
+        detail=body.get('detail',body) if isinstance(body,dict) else {}
+        if isinstance(detail,dict):
+            code=str(detail.get('status') or detail.get('code') or '')[:65].lower()
+            reason=str(detail.get('message') or '')[:400].lower()
+        elif isinstance(detail,str):
+            reason=detail[:400].lower()
+    except (ValueError,TypeError,AttributeError,httpx.HTTPError):
+        pass
+    if status==402:
+        if ('library' in reason and 'voice' in reason) or ('voice' in code and 'access' in code) or 'free users cannot use' in reason:
+            return ValueError('ElevenLabs HTTP 402: giọng từ thư viện không được phép tạo tiếng qua API trên gói Free. Hãy chọn giọng mặc định/giọng riêng được phép dùng API hoặc chọn Giữ âm thanh gốc để xuất MP4 miễn phí.')
+        if 'credit' in code or 'credit' in reason or 'quota' in reason:
+            return ValueError('ElevenLabs HTTP 402: tài khoản không còn đủ tín dụng để tạo đoạn giọng này. Kiểm tra quota trên ElevenLabs hoặc chọn âm gốc; VietFrame không tự mua thêm.')
+        if 'feature' in code or 'plan' in reason or 'upgrade' in reason:
+            return ValueError('ElevenLabs HTTP 402: giọng hoặc model này cần tính năng không có trên gói hiện tại. Chọn giọng khác hoặc xuất MP4 với âm thanh gốc.')
+        return ValueError('ElevenLabs HTTP 402 ('+(code or 'payment_required')+'): yêu cầu bị giới hạn bởi gói hoặc quyền sử dụng giọng. Kiểm tra quyền giọng trong tài khoản ElevenLabs; có thể chuyển sang âm gốc để xuất MP4.')
+    if status in (401,403):
+        return ValueError('ElevenLabs từ chối tạo tiếng (HTTP '+str(status)+'). Kiểm tra quyền Text to Speech → Access của API key.')
+    if status==404:
+        return ValueError('ElevenLabs không tìm thấy giọng này (404). Hãy tải lại danh sách giọng và chọn giọng khác.')
+    if status==422:
+        return ValueError('ElevenLabs không chấp nhận dữ liệu thoại (422). Kiểm tra nội dung, ngôn ngữ và model giọng.')
+    if status==429:
+        return ValueError('ElevenLabs đang giới hạn tần suất tạo tiếng (429). Hãy thử sau, không tự tăng hạn mức.')
+    return ValueError('ElevenLabs không tạo được giọng (HTTP '+str(status)+'). Hãy thử giọng khác hoặc giữ âm gốc.')
+
+
 def synthesize(text, voice_id, filename):
     if not 1 <= len(text) <= 500:
         raise ValueError('Mỗi câu ElevenLabs tối đa 500 ký tự trong VietFrame.')
@@ -164,7 +205,7 @@ def synthesize(text, voice_id, filename):
                                json={'text': text, 'model_id': 'eleven_multilingual_v2',
                                      'output_format': 'mp3_44100_128'}) as response:
                 if response.status_code >= 400:
-                    raise ValueError(f'ElevenLabs không tạo được giọng (HTTP {response.status_code}). Hãy kiểm tra gói, voice ID và hạn mức.')
+                    raise _tts_failure(response)
                 total = 0
                 with open(filename, 'wb') as output:
                     for chunk in response.iter_bytes():
