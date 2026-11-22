@@ -28,7 +28,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title='VietFrame Studio',version='0.9.0',lifespan=lifespan,docs_url='/api/docs')
+app = FastAPI(title='VietFrame Studio',version='0.13.0',lifespan=lifespan,docs_url='/api/docs')
 app.mount('/static',StaticFiles(directory=str(config.PROJECT_ROOT/'static')),name='static')
 
 
@@ -238,8 +238,10 @@ def update_password(request: Request, body: ChangePassword):
 @app.get('/api/health')
 def health():
     from . import credential_store
-    return {'status':'ok','version':'0.12.0','mode':'local-first',
-            'persistent_credentials':credential_store.persistent()}
+    return {'status':'ok','version':'0.13.0','mode':'local-first',
+            'persistent_credentials':credential_store.persistent(),
+            'persistent_sessions':credential_store.persistent(),
+            'remember_login_days':auth.SESSION_TTL//86400}
 
 
 @app.get('/api/capabilities')

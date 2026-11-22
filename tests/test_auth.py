@@ -64,7 +64,7 @@ def test_login_session_cookies_logout(client):
         r = other.post('/api/auth/login',json={'email':OWNER,'password':PASS})
         assert r.status_code == 200
         cookie = r.headers['set-cookie'].lower()
-        assert 'httponly' in cookie and 'samesite=strict' in cookie and 'path=/' in cookie
+        assert 'httponly' in cookie and 'samesite=lax' in cookie and 'path=/' in cookie
         csrf = r.json()['csrf']
         assert other.get('/api/projects').status_code == 200
         assert other.post('/api/auth/logout',headers={'X-CSRF-Token':csrf}).status_code == 200

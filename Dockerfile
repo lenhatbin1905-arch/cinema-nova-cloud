@@ -8,8 +8,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY static ./static
-# Fail build early if Python backend contains a syntax error.
-RUN python -m compileall -q app
+COPY tests ./tests
+# Build is blocked if backend, JavaScript, or any pytest regression fails.
+RUN python -m compileall -q app \
+ && node --check static/app.js \
+ && pip install --no-cache-dir 'pytest>=8,<10' \
+ && pytest -q tests
 ENV VIETFRAME_DATA=/data VIETFRAME_HOST=0.0.0.0 VIETFRAME_PORT=8010
 EXPOSE 10000
 # Render auto-configures PORT; startup rejects any unauthenticated media API request.

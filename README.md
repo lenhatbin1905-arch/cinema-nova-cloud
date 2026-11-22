@@ -179,3 +179,8 @@ Trên Render, email Google được liên kết với một chủ sở hữu tro
 ## ElevenLabs lỗi 402 khi tạo video (2026-11-22)
 
 Bản vá đọc JSON lỗi thật từ HTTP streaming của ElevenLabs, phân biệt giọng thư viện không được phép trên Free, hết credit, thiếu tính năng hoặc mất quyền TTS. API key đã lưu trong Neon, không bắt nhập lại. Không tự đổi giọng hoặc trả tiền. Khi xuất bị 402 và dự án còn video gốc, nút **Xuất MP4 với âm thanh gốc** chủ động khôi phục và xuất lại mà không gọi ElevenLabs; phụ đề/đồ họa đã lưu được giữ nguyên. Giọng từ thư viện có thể được liệt kê qua Voices API nhưng bị từ chối trong TTS Free; việc hiện danh sách giọng không bảo đảm được phép tạo tiếng.
+
+
+## Kiểm thử trong Docker từ v0.13
+
+Render build chạy `compileall`, `node --check static/app.js` và `pytest -q tests` trước khi triển khai, bao gồm test phân loại lỗi ElevenLabs 402, bảo mật session và điều kiện xuất MP4 thay thế. Nếu test lỗi, bản cũ tiếp tục phục vụ cho đến khi sửa. `VIETFRAME_CREDENTIALS_DATABASE_URL` chỉ được cấp ở runtime Render, không nằm trong hình Docker build hoặc GitHub.
