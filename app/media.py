@@ -51,7 +51,7 @@ def ffmpeg_render(source: Path, ass: Path, output: Path, audio: Path | None = No
     else:
         cmd += ['-map', '0:a?', '-c:a', 'aac']
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt','yuv420p',
-            '-movflags','+faststart', temporary.name]
+            '-movflags','+faststart', str(temporary)]
     try:
         result = subprocess.run(cmd, cwd=source.parent, capture_output=True, text=True, timeout=1800)
         if result.returncode or not temporary.is_file():

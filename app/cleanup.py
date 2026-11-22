@@ -21,9 +21,10 @@ def filter_chain(regions, width, height):
     filters=[]
     for r in validate_regions(regions):
         # Avoid edge zero-pixel errors and preserve aspect on even dimensions.
-        x=max(0,round(width*r['x']/100)); y=max(0,round(height*r['y']/100))
-        w=min(width-x, max(2,round(width*r['w']/100)))
-        h=min(height-y, max(2,round(height*r['h']/100)))
+        x=max(1, min(width-3, round(width*r['x']/100)))
+        y=max(1, min(height-3, round(height*r['y']/100)))
+        w=min(width-x-1, max(2,round(width*r['w']/100)))
+        h=min(height-y-1, max(2,round(height*r['h']/100)))
         if x+w>width or y+h>height or w<2 or h<2:
             raise ValueError('Kích thước vùng che không hợp lệ.')
         filters.append(f'delogo=x={x}:y={y}:w={w}:h={h}:show=0')

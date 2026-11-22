@@ -9,6 +9,7 @@ from tests.test_api import fake_video
 
 def test_cleanup_rejects_out_of_bounds_and_injection():
     assert cleanup.filter_chain([{'x':10,'y':70,'w':80,'h':15}],320,570)==['delogo=x=32:y=399:w=256:h=86:show=0']
+    assert cleanup.filter_chain([{'x':67,'y':4,'w':33,'h':9}],540,960)[0].startswith('delogo=x=362:y=38:w=177')
     for bad in [[{'x':90,'y':80,'w':30,'h':30}], [{'x':0,'y':0,'w':1,'h':20}], [{}],
                 [{'x':0,'y':0,'w':10,'h':10}]*4]:
         with pytest.raises((ValueError,KeyError,TypeError)):
