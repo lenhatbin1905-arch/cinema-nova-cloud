@@ -164,3 +164,8 @@ YouTube có thể từ chối trả luồng phát cho IP của Render, kể cả
 Khi `VIETFRAME_CREDENTIALS_DATABASE_URL` chỉ tới Neon Postgres gói Free, khóa Gemini và ElevenLabs được Fernet mã hóa bằng `VIETFRAME_CREDENTIAL_ENCRYPTION_KEY` lưu trên Render trước khi cất trong bảng `vietframe_provider_credentials`. Liên kết giữ nguyên khi deploy/restart; không đưa API key hay DB URL vào GitHub. `VIETFRAME_REQUIRE_PERSISTENT_KEYS=true` ngăn fallback về SQLite tạm nếu cấu hình Neon bị mất. Chỉ chuyển khóa mới sau khi đăng nhập và liên kết lại một lần; không có cách an toàn để tự lấy khóa của container cũ. SQLite của dự án video vẫn là tạm và video sẽ mất sau redeploy; lưu trữ video bền vững cần object storage riêng.
 
 Gemini v0.12 thử đường gửi dữ liệu video trực tiếp vào `generateContent` thay cho Files API (đã có lỗi HTTP 404 sau khi tệp ACTIVE). Video lớn được nén thành MP4 nhỏ để nằm trong ngưỡng inline. Không tự gọi API trả phí hoặc giả vờ hoàn tất phụ đề; trả lỗi rõ theo bước nếu Google vẫn từ chối model. 
+
+
+## Khắc phục Gemini 404 khi generateContent (2026-11-22)
+
+Model Gemini 2.5 Flash có thể trả metadata HTTP 200 nhưng generation HTTP 404 cho API key mới, do quyền truy cập model thay đổi. Mặc định chuyển sang `gemini-3.5-flash-lite` (Free Tier); tùy chọn `gemini-3.8-flash` (Free Tier nhưng hạn mức riêng). Xác thực API key bằng model đã chọn và kiểm tra `supportedGenerationMethods` khi Google trả trường này. Phân tích video gửi trực tiếp `inlineData` thay vì tham chiếu Google Files API; nén giữ âm thanh nếu input lớn. Đây là hai cơ chế độc lập để giảm lỗi 404; không thể bảo đảm mọi tài khoản Google đều có quyền/quota. Không tự bật billing.

@@ -23,8 +23,10 @@ from . import config, elevenlabs_bridge as eleven, credential_store as store
 from .subtitles import verify_segments
 
 API = 'https://generativelanguage.googleapis.com'
-MODEL = 'gemini-2.5-flash'
-ALLOWED_MODELS = {'gemini-2.5-flash', 'gemini-2.5-flash-lite'}
+MODEL = 'gemini-3.5-flash-lite'
+# Google retired 2.5 for many new keys in late 2026 (models.get may still return 200).
+# Both models below have documented Free Tier, subject to API-key quota.
+ALLOWED_MODELS = {'gemini-3.5-flash-lite', 'gemini-3.8-flash'}
 MAX_ANALYSIS_BYTES = 60 * 1024 * 1024
 MAX_ANALYSIS_DURATION = 180.0
 MAX_SEGMENTS = 80
