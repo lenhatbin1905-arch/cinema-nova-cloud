@@ -321,13 +321,27 @@ function detectLinkPlatform(){
   } catch { text(label,'Link chưa hợp lệ. Hãy dán URL HTTPS đầy đủ.'); }
 }
 
+function showIntegrationConnection(provider, kind, title, detail) {
+  const card = $('#'+provider+'-connection');
+  if (!card) return;
+  card.dataset.state = kind;
+  text($('#'+provider+'-connection-title'), title);
+  text($('#'+provider+'-status'), detail);
+  text(card.querySelector('.integration-check'), kind === 'connected' || kind === 'limited' ? '✓' : kind === 'error' ? '!' : '·');
+}
 async function loadGeminiStatus(){
   try{
     const s=await request('/api/integrations/gemini');
-    text($('#gemini-status'),s.connected?'Đã liên kết · '+s.model+' · sẵn sàng phân tích video':'Chưa liên kết Gemini. Sử dụng API key của dự án Free Tier.');
+    showIntegrationConnection('gemini',s.connected?'connected':'disconnected',
+      s.connected?'Đã kết nối Gemini thành công':'Chưa kết nối Gemini',
+      s.connected?'API key đã xác minh khi liên kết · Model: '+(s.model||'chưa xác định')+'. Lưu ý: tạo phụ đề vẫn cần kiểm tra riêng trên video thật.':'Nhập Gemini API key Free Tier để kết nối.');
     $('#gemini-disconnect').disabled=!s.connected;
-    if(s.connected)$('#gemini-model').value=s.model;
-  }catch(e){showError(e);}
+    $('#gemini-link-form button[type=submit]').textContent=s.connected?'Cập nhật API key Gemini':'Kết nối Gemini';
+    if(s.connected && s.model)$('#gemini-model').value=s.model;
+  }catch(e){
+    showIntegrationConnection('gemini','error','Không kiểm tra được Gemini',e.message);
+    showError(e);
+  }
 }
 async function linkGemini(event){
   event.preventDefault();
@@ -335,7 +349,7 @@ async function linkGemini(event){
   try{
     const s=await apiPost('/api/integrations/gemini/link',{api_key,model:$('#gemini-model').value});
     $('#gemini-api-key').value='';
-    toast('Đã liên kết '+s.model+'. Video chỉ được gửi khi bạn chủ động bấm phân tích.');
+    toast('Đã kết nối Gemini thành công · '+s.model+'. Phân tích video được kiểm tra riêng.');
     await loadGeminiStatus();
   }catch(e){showError(e);}
 }
@@ -390,7 +404,7 @@ async function loadVoices(){
       voices=vietnamese.length?vietnamese:voices;
     }
     for(const item of voices){const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');if(!val)continue;const o=document.createElement('option');o.value=val;o.textContent=typeof item==='string'?item:(item.name||item.label||val);select.append(o);}
-    if(voices.length){select.removeChild(fallback);text($('#voice-status'),voices.length+' giọng khả dụng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
+    if(voices.length){select.removeChild(fallback);text($('#voice-status'),provider==='elevenlabs'?'✓ ElevenLabs đã kết nối · '+voices.length+' giọng khả dụng':voices.length+' giọng khả dụng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
     else{text($('#voice-status'),'Không có giọng khả dụng trên gói API này');}
   }catch(e){text($('#voice-status'),e.message);$('#dub-button').disabled=true;}
 }
@@ -409,14 +423,24 @@ function refreshSpeakerVoices(){
 }
 
 async function loadElevenStatus(){
- try{const s=await request('/api/integrations/elevenlabs');state.elevenlabsConnected=s.connected;
-  text($('#elevenlabs-status'),s.limited?(s.warning||'Đã liên kết giới hạn; cần quyền User → Read để tạo giọng.'):s.connected?'Đã liên kết · '+(s.label||'ElevenLabs')+' (key không được hiển thị)':'Chưa liên kết. Cần API key một lần.');
-  $('#elevenlabs-disconnect').disabled=!s.connected;
- }catch(e){text($('#elevenlabs-status'),e.message);}
+  try{
+    const s=await request('/api/integrations/elevenlabs');
+    state.elevenlabsConnected=!!s.connected;
+    const limited=!!s.limited;
+    showIntegrationConnection('elevenlabs',!s.connected?'disconnected':limited?'limited':'connected',
+      s.connected?'Đã kết nối ElevenLabs thành công':'Chưa kết nối ElevenLabs',
+      !s.connected?'Nhập API key một lần để chọn giọng.'
+        :limited?'API đã xác minh quyền đọc giọng. Chưa thể xác minh hạn mức Free; cần User → Read trước khi tạo tiếng.'
+        :'Tài khoản: '+(s.label||'ElevenLabs')+' · API key được lưu mã hóa. Hạn mức Free được kiểm tra trước khi tạo giọng.');
+    $('#elevenlabs-disconnect').disabled=!s.connected;
+    $('#elevenlabs-link-form button[type=submit]').textContent=s.connected?'Thay API key ElevenLabs':'Liên kết tài khoản';
+  }catch(e){
+    showIntegrationConnection('elevenlabs','error','Không kiểm tra được ElevenLabs',e.message);
+  }
 }
 async function linkEleven(event){
  event.preventDefault();const input=$('#elevenlabs-api-key'),button=$('#elevenlabs-link-form button[type=submit]');button.disabled=true;
- try{const result=await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();if(result.warning){text($('#elevenlabs-status'),result.warning);toast('ElevenLabs đã liên kết có giới hạn: cần quyền User Read để tạo giọng.',true);}else{toast('Đã liên kết ElevenLabs an toàn.');}}
+ try{const result=await apiPost('/api/integrations/elevenlabs/link',{api_key:input.value});input.value='';await loadElevenStatus();$('#voice-provider').value='elevenlabs';await loadVoices();if(result.warning){toast('Đã kết nối ElevenLabs để chọn giọng. Cần thêm User → Read trước khi tạo tiếng.',true);}else{toast('Đã kết nối ElevenLabs thành công.');}}
  catch(e){text($('#elevenlabs-status'), 'Không thể liên kết: '+e.message);showError(e);}finally{input.value='';button.disabled=false;}
 }
 async function unlinkEleven(){

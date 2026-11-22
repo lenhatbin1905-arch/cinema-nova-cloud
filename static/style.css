@@ -79,3 +79,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .job-progress.complete{background:#f3f8f5}
 @media (max-width:520px){.job-progress{padding:12px}.job-percent{font-size:20px}.job-steps{gap:5px}.job-step{font-size:9px;padding:5px}}
 @media(prefers-reduced-motion:reduce){#job-meter-fill{transition:none}}
+
+/* Clear verified connection states; a stored API key is not proof of completed media generation. */
+.integration-connection{display:flex;align-items:flex-start;gap:12px;padding:14px 15px;border:1px solid #dfe5dd;border-radius:10px;background:#f6f7f5;margin:13px 0 19px;max-width:100%;color:#3c5547}
+.integration-connection .integration-check{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border:1px solid #cbd8cd;background:#e8eee8;border-radius:50%;font-weight:800;font-size:15px;line-height:1}
+.integration-connection strong{font-size:14px;line-height:1.35;display:block;letter-spacing:-.2px}
+.integration-connection p{font-size:12px;line-height:1.55;color:#617469;margin:5px 0 0;overflow-wrap:anywhere}
+.integration-connection[data-state="connected"]{background:#edf6ee;border-color:#bbd7bd;color:#25573a}
+.integration-connection[data-state="connected"] .integration-check{background:#33784b;color:white;border-color:#33784b}
+.integration-connection[data-state="limited"]{background:#f9f5e9;border-color:#e5d1a9;color:#665022}
+.integration-connection[data-state="limited"] .integration-check{background:#b17b31;color:white;border-color:#b17b31}
+.integration-connection[data-state="error"]{background:#fff2ef;border-color:#edc6bf;color:#8f382f}
+.integration-connection[data-state="error"] .integration-check{background:#aa5145;color:white;border-color:#aa5145}
+.integration-connection[data-state="disconnected"]{background:#f6f7f5;border-color:#dfe5dd;color:#566259}
+@media(max-width:760px){.integration-connection{padding:12px;gap:10px}.integration-connection strong{font-size:13px}}
