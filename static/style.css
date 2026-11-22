@@ -103,3 +103,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* User-initiated recovery from upstream Gemini 503 while retaining saved work. */
 #retry-gemini-button:not(.hidden){margin:12px 0;padding:12px 15px;width:100%;white-space:normal;text-align:center;background:#fffaf0;color:#694d2a;border:1px solid #dac19b}
 #retry-gemini-button:not(.hidden):hover{background:#fbefd9}
+
+/* Explicit Free API eligibility instead of selecting a voice that leads to HTTP 402. */
+#dub-voice option:disabled{color:#ad5149;background:#fff0ed}
+#voice-status{line-height:1.55;white-space:normal}
+.voice-free-warning{line-height:1.65}

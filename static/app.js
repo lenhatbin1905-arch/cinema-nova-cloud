@@ -311,7 +311,10 @@ async function completeVideo(){
     state.selected=p;
     const provider=$('#voice-provider').value;
     const voice=provider==='original'?null:$('#dub-voice').value;
-    if(provider!=='original' && !voice) throw new Error('Hãy liên kết ElevenLabs và chọn một giọng trước khi tạo.');
+    if(provider!=='original' && !voice) throw new Error(
+      provider==='elevenlabs'
+        ?'API ElevenLabs đã kết nối nhưng chưa có giọng được phép dùng API Free. Hãy chọn giọng mặc định không bị khóa hoặc chọn Giữ âm thanh gốc để xuất MP4.'
+        :'Chưa có giọng phù hợp. Hãy chọn giọng trước khi tạo video.');
     await apiPost('/api/projects/'+state.selected.id+'/complete-video', {style:currentStyle(), voice_provider:provider, voice,
       voice_map:collectVoiceMap()});
     toast('Đang tạo video thật: xử lý chữ/logo, đồng bộ giọng và xuất MP4.');
@@ -406,7 +409,7 @@ async function dubAudio(){
   try {
     if(!state.selected)throw new Error('Chưa chọn dự án.');
     const voice=$('#dub-voice').value;
-    if(!voice)throw new Error('Hãy chọn giọng phù hợp với nhà cung cấp đang kết nối.');
+    if(!voice)throw new Error('Chưa có giọng đủ quyền dùng API Free. Hãy chọn giọng mặc định được mở khóa hoặc giữ âm thanh gốc.');
     await saveSegments(false);
     await apiPost('/api/projects/'+state.selected.id+'/dub',{voice,provider:$('#voice-provider').value});
     toast('Đang tổng hợp lời thoại và căn theo thời gian thật.');await refreshCurrent();
@@ -426,19 +429,37 @@ async function loadVoices(){
       const vietnamese=voices.filter(v=>{const name=String(v.name||v.label||'');const lang=String(v.language||v.lang||'');const id=String(v.id||v.voice_id||'');return /vietnam|tiếng việt|\bvi\b|^vi[_-]/i.test(name+' '+lang+' '+id)});
       voices=vietnamese.length?vietnamese:voices;
     }
-    for(const item of voices){const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');if(!val)continue;const o=document.createElement('option');o.value=val;
-      const type=String(item?.category||'').toLowerCase();
-      const restricted=/professional|famous|library/.test(type);
-      o.textContent=typeof item==='string'?item:(item.name||item.label||val)+(restricted?' · có thể yêu cầu gói trả phí':'');
-      select.append(o);}
-    if(voices.length){select.removeChild(fallback);text($('#voice-status'),provider==='elevenlabs'?'✓ ElevenLabs đã kết nối · '+voices.length+' giọng khả dụng':voices.length+' giọng khả dụng');$('#dub-button').disabled=!state.selected||state.selected.status!=='ready';}
-    else{text($('#voice-status'),'Không có giọng khả dụng trên gói API này');}
+    let freeCount=0,restrictedCount=0;
+    for(const item of voices){
+      const val=typeof item==='string'?item:(item.id||item.voice_id||item.name||'');
+      if(!val)continue;
+      const allowed=provider!=='elevenlabs'||(typeof item==='object'&&item.free_api_candidate===true);
+      const option=document.createElement('option');option.value=val;option.disabled=!allowed;
+      if(allowed)freeCount++;else restrictedCount++;
+      option.textContent=(typeof item==='string'?item:(item.name||item.label||val))+
+        (provider==='elevenlabs'?(allowed?' · API Free (chưa thử TTS)':' · BỊ KHÓA trên API Free'):'');
+      select.append(option);
+    }
+    if(voices.length)select.removeChild(fallback);
+    const choices=[...select.options].filter(option=>option.value&&!option.disabled);
+    if(choices.length){
+      select.value=choices[0].value;
+      text($('#voice-status'),provider==='elevenlabs'
+        ?'✓ Đã kết nối API · '+freeCount+' giọng có thể dùng Free · '+restrictedCount+' giọng bị khóa'
+        :freeCount+' giọng khả dụng');
+      $('#dub-button').disabled=!state.selected||state.selected.status!=='ready';
+    } else {
+      text($('#voice-status'),provider==='elevenlabs'
+        ?'API đã kết nối nhưng không có giọng mặc định phù hợp gói Free. Giọng thư viện bị chặn HTTP 402. Chọn Giữ âm thanh gốc để xuất MP4.'
+        :'Không có giọng đọc khả dụng.');
+      $('#dub-button').disabled=true;
+    }
   }catch(e){text($('#voice-status'),e.message);$('#dub-button').disabled=true;}
 }
 function refreshSpeakerVoices(){
   const container=$('#speaker-voices');container.replaceChildren();
   const speakers=[...new Set((state.selected?.segments||[]).map(s=>s.speaker||'spk1'))].sort();
-  const options=[...$('#dub-voice').options].filter(o=>o.value).map(o=>({value:o.value,name:o.textContent}));
+  const options=[...$('#dub-voice').options].filter(o=>o.value&&!o.disabled).map(o=>({value:o.value,name:o.textContent}));
   if(speakers.length<2 || $('#voice-provider').value==='original')return;
   const hint=document.createElement('small');hint.textContent='Chọn giọng riêng cho từng nhân vật (không bắt buộc)';container.append(hint);
   for(const speaker of speakers){
@@ -455,10 +476,10 @@ async function loadElevenStatus(){
     state.elevenlabsConnected=!!s.connected;
     const limited=!!s.limited;
     showIntegrationConnection('elevenlabs',!s.connected?'disconnected':limited?'limited':'connected',
-      s.connected?'Đã kết nối ElevenLabs thành công':'Chưa kết nối ElevenLabs',
+      s.connected?'API ElevenLabs đã liên kết':'Chưa kết nối ElevenLabs',
       !s.connected?'Nhập API key một lần để chọn giọng.'
         :limited?'API đã xác minh quyền đọc giọng. Chưa thể xác minh hạn mức Free; cần User → Read trước khi tạo tiếng.'
-        :'Tài khoản: '+(s.label||'ElevenLabs')+' · API key mã hóa · '+(s.storage||'Đang kiểm tra nơi lưu')+'. Hạn mức Free được kiểm tra trước khi tạo giọng.');
+        :'Tài khoản: '+(s.label||'ElevenLabs')+' · API key mã hóa · '+(s.storage||'Đang kiểm tra nơi lưu')+'. Một số giọng bị khóa qua API Free; kiểm tra lựa chọn trong Biên tập.');
     $('#elevenlabs-disconnect').disabled=!s.connected;
     $('#elevenlabs-link-form button[type=submit]').textContent=s.connected?'Thay API key ElevenLabs':'Liên kết tài khoản';
   }catch(e){
