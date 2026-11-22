@@ -176,3 +176,13 @@ def test_gap_never_steals_next_cue_or_exceeds_video_boundary():
     no_gap=[{'start':0,'end':1,'text':'Một'},
             {'start':1,'end':2,'text':'Hai'}]
     assert jobs.available_speech_window(no_gap,0,2.0)==1.0
+
+
+def test_failed_voice_timing_report_remains_visible_and_editable():
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    js=(root/'static/app.js').read_text(encoding='utf-8')
+    assert "timingReportAvailable" in js
+    assert "failedIndex" in js
+    assert "field.focus({preventScroll:true})" in js
+    assert "Khôi phục để sửa câu thoại dài" in js
