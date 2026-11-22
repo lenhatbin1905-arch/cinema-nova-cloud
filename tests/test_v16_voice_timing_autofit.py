@@ -131,3 +131,23 @@ def test_render_text_explains_automatic_fitting():
     html=(root/'static/index.html').read_text(encoding='utf-8')
     assert 'Mỗi câu được tự căn vào thời lượng cảnh' in html
     assert 'sẽ báo lỗi khi câu quá dài' not in html
+
+
+def test_retry_reuses_same_tts_audio_without_spending_more_credits(client,monkeypatch):
+    pid=_new_project(client)
+    produced,_=_mock_tts(monkeypatch,1.6)
+    jobs.dubbing(pid,'voice01',provider='elevenlabs')
+    assert len(produced)==1
+    jobs.dubbing(pid,'voice01',provider='elevenlabs')
+    assert len(produced)==1, 'Same text and voice must reuse existing TTS audio'
+    report=client.get(f'/api/projects/{pid}/voice-timing-report').json()
+    assert report['all_within_limit'] is True
+
+
+def test_changing_voice_or_text_invalidates_tts_cache(client,monkeypatch):
+    pid=_new_project(client)
+    produced,_=_mock_tts(monkeypatch,1.6)
+    jobs.dubbing(pid,'voice01',provider='elevenlabs')
+    jobs.dubbing(pid,'voice02',provider='elevenlabs')
+    assert len(produced)==2, 'A different voice must create different audio'
+    assert produced[0][1]=='voice01' and produced[1][1]=='voice02'
