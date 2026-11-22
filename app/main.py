@@ -534,15 +534,24 @@ def gemini_unlink():
 @app.post('/api/projects/{pid}/gemini-script', status_code=202)
 def gemini_script(pid: str):
     project=_find(pid)
-    _ensure_editable(project)
+    if project['status'] not in ('ready','error'):
+        raise HTTPException(409,'Dự án đang xử lý. Hãy đợi tác vụ hiện tại hoàn tất.')
     if not project['video_file']:
         raise HTTPException(422,'Cần nhập video trước khi phân tích Gemini.')
+    source=config.PROJECTS_DIR / pid / project['video_file']
+    if not source.is_file():
+        raise HTTPException(409,'Tệp video nguồn không còn trên Render. Hãy nhập lại video.')
     if not gemini.status()['connected']:
         raise HTTPException(503,'Chưa kết nối Gemini Free-tier trong Cài đặt.')
     if not 0 < project['duration'] <= gemini.MAX_ANALYSIS_DURATION:
         raise HTTPException(422,'Giới hạn phân tích Gemini tối đa 180 giây mỗi lượt.')
-    _claim(pid,'analyzing','Đang tải video lên Gemini và tạo phụ đề, bản thoại Việt theo thời gian…')
-    jobs.submit(pid,jobs.gemini_script)
+    if not db.claim_gemini_project(pid,'Gemini đang nghe thoại. Phụ đề đã lưu được giữ lại nếu lỗi…'):
+        raise HTTPException(409,'Dự án đang xử lý hoặc đã thay đổi. Làm mới rồi thử lại.')
+    try:
+        jobs.submit(pid,jobs.gemini_script)
+    except RuntimeError as exc:
+        db.update(pid,status='error',progress=0,message='Hàng chờ máy chủ tạm thời không nhận tác vụ. Video và phụ đề vẫn còn.')
+        raise HTTPException(503,'Hàng chờ máy chủ đang khởi động lại. Hãy thử lại sau ít phút.') from exc
     return {'accepted':True,'project_id':pid,'provider':'gemini','mode':'video_to_vi_voice_script'}
 
 

@@ -86,6 +86,21 @@ def claim_ready_project(project_id, status, message):
         return row is not None
 
 
+def claim_gemini_project(project_id, message):
+    """Atomically start/retry Gemini, retaining previously saved captions.
+
+    A failed job is retryable only while its video_file reference exists.
+    The API additionally verifies the actual source on disk.
+    """
+    with _connect() as con:
+        row=con.execute(
+            "UPDATE projects SET status='analyzing',progress=1,message=?,updated_at=? "
+            "WHERE id=? AND (status='ready' OR (status='error' AND video_file IS NOT NULL)) RETURNING id",
+            (message,now(),project_id)
+        ).fetchone()
+        return row is not None
+
+
 def save_segments_if_ready(project_id, segments):
     """Keep finished dubbing when captions are unchanged; invalidate derived media on edits."""
     encoded = json.dumps(segments, ensure_ascii=False)

@@ -302,13 +302,31 @@ def analyze_video(source: Path, duration: float, progress=None):
                                 'responseMimeType':'application/json'}}
         del encoded
         if progress: progress(74,'Gemini đang nhận dạng lời nói và viết phụ đề Việt theo cảnh…')
+        # Google Free Tier may return intermittent 503 overload.
+        # Retry only transient upstream errors (502/503/504), never quota,
+        # invalid credentials, invalid model, or any paid-model fallback.
+        retry_delays=(0,2,4)  # one request + at most two retries
         try:
             with httpx.Client(base_url=API,trust_env=False,timeout=30,follow_redirects=False) as client:
-                response=client.post('/v1beta/models/'+model+':generateContent',
-                                     headers={'x-goog-api-key':key},json=request,timeout=140)
+                for attempt,delay in enumerate(retry_delays):
+                    if delay:
+                        if progress:
+                            progress(74+attempt*3,
+                                f'Google đang quá tải; thử lại {attempt}/2. Video và phụ đề cũ vẫn được giữ…')
+                        time.sleep(delay)
+                    response=client.post('/v1beta/models/'+model+':generateContent',
+                                         headers={'x-goog-api-key':key},json=request,timeout=140)
+                    if response.status_code not in (502,503,504) or attempt==len(retry_delays)-1:
+                        break
+        except httpx.TimeoutException as exc:
+            raise ValueError('Gemini phản hồi quá lâu. Video và phụ đề cũ vẫn còn; có thể thử lại.') from exc
         except httpx.RequestError as exc:
-            raise ValueError('Kết nối Gemini bị gián đoạn trong khi phân tích video.') from exc
+            raise ValueError('Kết nối Gemini bị gián đoạn. Video và phụ đề cũ vẫn còn; có thể thử lại.') from exc
         if response.status_code>=400:
+            if response.status_code in (502,503,504):
+                raise ValueError('Gemini quá tải (HTTP '+str(response.status_code)+
+                                 ') sau 3 lần thử. Video và phụ đề cũ vẫn còn. '
+                                 'Bấm Thử lại Gemini sau vài phút, không cần nhập API key hoặc tạo dự án mới.')
             raise ValueError(_safe_generation_error(response,model))
         if progress: progress(91,'Gemini trả kết quả. Đang kiểm tra phụ đề và mốc thời gian…')
         data=response.json()
