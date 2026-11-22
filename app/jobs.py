@@ -157,9 +157,12 @@ def dubbing(pid, voice, provider='kokoro', *, one_click=False, voice_map=None):
     segments=verify_segments(project['segments'],project['duration'])
     if len(segments)>80:
         raise RuntimeError('Lồng tiếng bản đầu tối đa 80 câu mỗi video.')
-    if provider == 'elevenlabs':
-        eleven.free_quota_available(sum(len(s.get('voice_text') or s['text']) for s in segments))
     voice_map=voice_map or {}
+    if provider == 'elevenlabs':
+        eleven.preflight_free_voices(
+            [voice]+list(voice_map.values()),
+            sum(len(s.get('voice_text') or s['text']) for s in segments)
+        )
     folder=path_for(pid)
     prepared=[]
     timing_report=[]

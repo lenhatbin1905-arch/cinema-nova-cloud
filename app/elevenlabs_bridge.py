@@ -130,7 +130,11 @@ def voices():
     result = data.get('voices', [])
     return [{'id': str(v['voice_id']),
              'name': str(v.get('name') or v['voice_id']),
-             'category': str(v.get('category') or '')[:60]}
+             'category': str(v.get('category') or '')[:60],
+             # ElevenLabs confirms Voice Library voices cannot be used through
+             # the API on Free. Only premade voices are safe Free candidates.
+             # Candidate does not guarantee quota or upstream TTS success.
+             'free_api_candidate': str(v.get('category') or '').lower() == 'premade'}
             for v in result if isinstance(v, dict) and v.get('voice_id')]
 
 
@@ -150,6 +154,36 @@ def free_quota_available(characters):
     if remaining < characters:
         raise ValueError(f'Gói Free còn {remaining} ký tự, không đủ cho yêu cầu {characters} ký tự.')
     return {'remaining': remaining, 'required': characters, 'tier': tier}
+
+
+
+def preflight_free_voices(voice_ids, characters):
+    """Read-only Free plan and per-voice eligibility check.
+
+    Prevents queued rendering and partial dubbing when a shared/library voice
+    is guaranteed to return 402 on a Free account. This does NOT generate TTS
+    or consume credits; final TTS can still fail for other provider reasons.
+    """
+    ids=list(dict.fromkeys(voice_ids))
+    if not ids or len(ids)>16 or any(not isinstance(v,str) or
+           not 1<=len(v)<=80 or not all(c.isalnum() or c in '-_' for c in v)
+           for v in ids):
+        raise ValueError('Danh sách mã giọng ElevenLabs không hợp lệ.')
+    quota=free_quota_available(characters)
+    all_voices={v['id']:v for v in voices()}
+    for voice_id in ids:
+        selected=all_voices.get(voice_id)
+        if selected is None:
+            raise ValueError('Giọng ElevenLabs không còn trong danh sách tài khoản. Hãy tải lại danh sách.')
+        if not selected['free_api_candidate']:
+            name=selected['name'][:65]
+            raise ValueError('Giọng "'+name+'" thuộc loại '+(selected['category'] or 'chưa xác minh')+
+                             ', chưa được xác nhận cho API Free (ElevenLabs trả HTTP 402 với giọng thư viện). '
+                             'Hãy chọn giọng mặc định được đánh dấu dùng được trên Free '
+                             'hoặc chọn Giữ âm thanh gốc. Không cần nhập lại API key.')
+    return {'eligible':True,'tier':quota['tier'],
+            'required':quota['required'],'remaining':quota['remaining'],
+            'voices_checked':len(ids),'note':'Đã kiểm tra quyền theo metadata và hạn mức; chưa tạo audio.'}
 
 
 def _tts_failure(response):

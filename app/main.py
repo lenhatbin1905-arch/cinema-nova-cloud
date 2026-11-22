@@ -492,7 +492,10 @@ def complete_video(pid: str, req: CompleteVideoRequest):
             if not eleven.is_connected()['connected']:
                 raise HTTPException(503, 'Cần liên kết ElevenLabs một lần trong Cài đặt.')
             try:
-                eleven.free_quota_available(sum(len(s.get('voice_text') or s['text']) for s in p['segments']))
+                eleven.preflight_free_voices(
+                    [req.voice]+list(req.voice_map.values()),
+                    sum(len(s.get('voice_text') or s['text']) for s in p['segments'])
+                )
             except (ValueError, RuntimeError) as exc:
                 raise HTTPException(422, str(exc)) from exc
     for speaker, voice_id in req.voice_map.items():
@@ -607,7 +610,10 @@ def dub_video(pid: str,request: DubRequest):
         if not eleven.is_connected()['connected']:
             raise HTTPException(503,'Chưa liên kết ElevenLabs ở Cài đặt.')
         try:
-            eleven.free_quota_available(sum(len(s.get('voice_text') or s['text']) for s in p['segments']))
+            eleven.preflight_free_voices(
+                [request.voice],
+                sum(len(s.get('voice_text') or s['text']) for s in p['segments'])
+            )
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(422, str(exc)) from exc
     _claim(pid,'dubbing','Đã xếp hàng lồng tiếng Việt.')

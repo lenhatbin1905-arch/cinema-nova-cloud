@@ -189,3 +189,8 @@ Render build chạy `compileall`, `node --check static/app.js` và `pytest -q te
 ## v0.14 Gemini transient overload / sticky failed project
 
 Google có thể trả 503 cho Gemini Free Tier ngay cả khi API key hợp lệ. Tự thử lại tối đa 2 lần (chờ 2 giây rồi 4 giây) chỉ với 502/503/504, không thử lại 429 hoặc tự chuyển model trả phí. Sau lỗi, video và phụ đề đã lưu không bị xóa; nút **Thử lại Gemini** có thể nhận tác vụ trực tiếp từ trạng thái lỗi. Máy chủ chuyển trạng thái theo phép cập nhật nguyên tử để tránh hai lượt Gemini chạy trùng nhau. UI cập nhật trạng thái nút qua polling, không reset nội dung phụ đề chưa lưu. Đây là khôi phục lỗi tạm thời, không phải cam kết Google không còn 503.
+
+
+## v0.15 — ElevenLabs Free: kiểm tra giọng trước khi tạo video
+
+Trạng thái API key đã kết nối chỉ xác minh quyền truy cập, không chứng minh mọi giọng đều được tạo qua TTS Free. ElevenLabs xác nhận giọng Voice Library không khả dụng qua API của gói Free. API Voices nay đánh dấu `free_api_candidate` chỉ cho category `premade` (chưa bảo đảm TTS thực tế). Khi chọn giọng loại khác, website ẩn hoặc vô hiệu hóa tùy chọn TTS để người dùng không bị lỗi 402 sau khi bắt đầu; máy chủ thực hiện kiểm tra read-only lần cuối cho mọi voice ID, kể cả giọng được gán riêng theo speaker, và số ký tự còn lại trước khi xếp hàng. Nếu không phù hợp, trả 422 **trước khi đổi trạng thái dự án**; phụ đề, video và các vùng chỉnh sửa vẫn được giữ. Gói Free không bị nâng cấp, không phát sinh chi phí, không gọi thử TTS lặp lại. Giữ âm thanh gốc vẫn xuất MP4 miễn phí (nhưng không tạo giọng Việt). Giọng category khác premade có thể hợp lệ ở tài khoản/gói khác: VietFrame dùng chế độ Free-First nên chặn để không rủi ro thanh toán.
