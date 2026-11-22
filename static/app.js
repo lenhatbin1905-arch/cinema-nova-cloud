@@ -807,7 +807,16 @@ function init(){
   $('#style-caption-mode').addEventListener('change',updateCaptionOverlay);
   ['cleanup-x','cleanup-y','cleanup-w','cleanup-h'].forEach(id=>$('#'+id).addEventListener('input',()=>{ const r={x:Number($('#cleanup-x').value),y:Number($('#cleanup-y').value),w:Number($('#cleanup-w').value),h:Number($('#cleanup-h').value)}; const saved=state.cleanupDraft;state.cleanupDraft=[r];updateCleanupOverlay();state.cleanupDraft=saved; }));
   $('#mark-caption-region').setAttribute('aria-pressed','false');
-  $('#mark-caption-region').addEventListener('click',()=>{try{toggleCaptionDrawing();}catch(e){showError(e);}});
+  $('#mark-caption-region').addEventListener('click',async()=>{
+    try{
+      if(!captionDrawing && state.selected?.status==='error' && state.selected.video_url){
+        const project=await apiPost('/api/projects/'+state.selected.id+'/recover',{});
+        state.selected=project;showProject(project);await loadProjects();
+        toast('Đã khôi phục dự án để bạn chỉnh chữ. Video gốc và lời thoại vẫn được giữ.');
+      }
+      toggleCaptionDrawing();
+    }catch(e){showError(e);}
+  });
   const drawLayer=$('#cleanup-draw-layer');
   drawLayer.addEventListener('pointerdown',e=>{
     const geom=drawnVideoGeometry();if(!captionDrawing||!geom)return;
