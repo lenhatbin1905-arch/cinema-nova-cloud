@@ -302,6 +302,48 @@ async def upload_video(file: UploadFile = File(...), title: str = Form('Video c�
         await file.close()
 
 
+@app.post('/api/projects/{pid}/replace-source', status_code=200)
+async def replace_failed_source(pid: str, file: UploadFile = File(...), license_confirmed: bool = Form(False)):
+    """Recover a failed link-import project by uploading an owned video file.
+
+    The existing owner session and CSRF middleware protect the endpoint.
+    Never overwrite a successful imported video.
+    """
+    p=_find(pid)
+    if not license_confirmed:
+        raise HTTPException(422,'Cần xác nhận quyền sử dụng tệp video trước khi tải lên.')
+    if p['status'] != 'error' or p['video_file']:
+        raise HTTPException(409,'Chỉ có thể thay tệp cho dự án lỗi chưa có video nguồn.')
+    suffix=Path(file.filename or '').suffix.lower()
+    if suffix not in {'.mp4','.mov','.webm','.mkv'}:
+        raise HTTPException(422,'Chỉ nhận MP4, MOV, WEBM hoặc MKV.')
+    if not db.claim_failed_import_for_upload(pid):
+        raise HTTPException(409,'Dự án đang được tải lên hoặc đã thay đổi. Làm mới và thử lại.')
+    directory=jobs.path_for(pid)
+    destination=directory/('replacement-'+uuid4().hex+suffix)
+    try:
+        size=0
+        with destination.open('xb') as dst:
+            while chunk := await file.read(1024*1024):
+                size+=len(chunk)
+                if size>config.MAX_UPLOAD_MB*1024*1024:
+                    raise HTTPException(413,f'Tệp vượt giới hạn {config.MAX_UPLOAD_MB} MB của máy chủ.')
+                dst.write(chunk)
+        probe(destination)
+        # Preserve original source URL and title for the failed link-import project.
+        db.update(pid,segments_json='[]',output_file=None,dub_file=None)
+        jobs.finish_video(pid,destination)
+        return _shape(_find(pid))
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        db.update(pid,status='error',progress=0,message='Không nhập được tệp thay thế: '+str(exc)[:350])
+        if isinstance(exc,HTTPException):
+            raise
+        raise HTTPException(422,'Không đọc được video. Kiểm tra MP4/MOV và thời lượng được phép.') from exc
+    finally:
+        await file.close()
+
+
 class Segment(BaseModel):
     start: float
     end: float

@@ -19,6 +19,8 @@ def capabilities():
     return {
         'ffmpeg': bool(shutil.which('ffmpeg') and shutil.which('ffprobe')),
         'link_import': available('yt_dlp'),
+        'max_upload_mb': config.MAX_UPLOAD_MB,
+        'max_duration_seconds': config.MAX_DURATION_SECONDS,
         'platforms': ['Facebook','YouTube','TikTok','Douyin','Bilibili','Instagram'],
         'offline_transcription': available('faster_whisper'),
         'offline_translation': available('argostranslate'),

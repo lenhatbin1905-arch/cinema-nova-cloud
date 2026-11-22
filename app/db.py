@@ -115,12 +115,21 @@ def save_cleanup_if_ready(project_id, regions):
     return True
 
 
+def claim_failed_import_for_upload(project_id):
+    """An atomic transition prevents simultaneous replacement uploads."""
+    with _connect() as con:
+        row=con.execute("UPDATE projects SET status='uploading', progress=1, message=?, updated_at=? "
+                        "WHERE id=? AND status='error' AND video_file IS NULL RETURNING id",
+                        ('Đang nhận tệp video thay thế…', now(), project_id)).fetchone()
+        return row is not None
+
+
 def mark_interrupted_jobs():
     """On restart report jobs lost by the in-process executor; never leave fake progress."""
     with _connect() as con:
         con.execute("UPDATE projects SET status='error', progress=0, "
                     "message='Tác vụ bị gián đoạn do máy chủ khởi động lại. Có thể khôi phục dự án nếu video nguồn còn.', "
-                    "updated_at=? WHERE status IN ('queued','downloading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing')",
+                    "updated_at=? WHERE status IN ('queued','downloading','uploading','transcribing','translating','rendering','dubbing','generating','finishing','analyzing')",
                     (now(),))
 
 

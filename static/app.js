@@ -72,13 +72,34 @@ async function upload(file) {
   if (!file) return;
   try {
     consent();
-    if (file.size > 350 * 1024 * 1024) throw new Error('Tệp trên 350 MB.');
+    const limit=state.capabilities?.max_upload_mb || 25;
+    if (file.size > limit * 1024 * 1024) throw new Error('Tệp vượt giới hạn '+limit+' MB của máy chủ.');
     const data = new FormData(); data.append('file', file); data.append('title',file.name); data.append('license_confirmed','true');
     toast(`Đang gửi ${file.name}…`);
     const p = await request('/api/projects/upload', {method:'POST',body:data});
     toast('Tải video lên thành công.'); await loadProjects(); await selectProject(p.id);
   } catch(e) { showError(e); }
   finally { $('#video-upload').value = ''; }
+}
+async function uploadFailedProjectFile(file) {
+  if (!file || !state.selected) return;
+  const pid=state.selected.id;
+  if (!$('#recovery-license').checked) return showError(new Error('Hãy xác nhận quyền sử dụng video.'));
+  const max=state.capabilities?.max_upload_mb || 25;
+  if (file.size>max*1024*1024) return showError(new Error('Tệp vượt giới hạn '+max+' MB trên Render.'));
+  const input=$('#recovery-file');input.disabled=true;
+  try {
+    const data=new FormData(); data.append('file',file); data.append('license_confirmed','true');
+    toast('Đang chuyển tệp vào dự án lỗi…');
+    const project=await request('/api/projects/'+pid+'/replace-source',{method:'POST',body:data});
+    state.preview='source';state.selected=project;
+    showProject(project);
+    await loadProjects();
+    toast('Đã nhập video gốc vào dự án. Bạn có thể dùng Gemini và biên tập tiếp.');
+  } catch(e){showError(e);} finally {
+    input.value='';
+    input.disabled=!$('#recovery-license').checked;
+  }
 }
 function renderProjects() {
   const holder = $('#project-list'); holder.replaceChildren();
@@ -139,6 +160,7 @@ function showProject(p) {
   $('#show-source').classList.toggle('active',!playingExport);
   $('#show-export').classList.toggle('active',playingExport);
   $('#recover-current').classList.toggle('hidden',p?.status!=='error' || !p?.video_url);
+  $('#import-recovery').classList.toggle('hidden',!(p?.status==='error' && !p?.video_url));
   if (!p) {$('#player').removeAttribute('src');$('#player').load();}
   text($('#project-status'),p ? (statusText[p.status]||p.status):'Chưa chọn');
   text($('#project-message'),p ? `${p.message || 'Video đã được nạp.'}  ${ongoing.includes(p.status) ? `(${p.progress}%)` : ''}` : 'Chọn một dự án để thao tác.');
@@ -418,6 +440,9 @@ async function loadCapabilities(){
   try {const data=await request('/api/capabilities');state.capabilities=data;const labels={ffmpeg:'FFmpeg / xuất video',link_import:'Tải video 6 nền tảng',offline_transcription:'Whisper nhận dạng thoại',offline_translation:'Argos Translate',tts_kokoro_local:'Giọng Việt local (Kokoro)',elevenlabs_link_supported:'Kết nối ElevenLabs (1 lần)',gemini_video_script_supported:'Gemini phân tích video & thoại Việt',static_text_cleanup:'Che chữ/logo cố định',ai_video_local:'AI video GPU cục bộ',gpu:'GPU CUDA'};
     const holder=$('#capability-list');holder.replaceChildren();Object.entries(labels).forEach(([key,label])=>{const row=document.createElement('div');row.className='capability';const dot=document.createElement('span');dot.className=data[key]?'yes':'no';dot.textContent=data[key]?'●':'○';const t=document.createElement('b');t.textContent=label;const status=document.createElement('small');status.textContent=data[key]?'Sẵn sàng':'Chưa cài';row.append(dot,t,status);holder.append(row);});
     $('#ai-generate').disabled=!data.ai_video_local;
+    const lim=data.max_upload_mb||25,dur=data.max_duration_seconds||120;
+    text($('#upload-limit'),`MP4, MOV, WEBM, MKV · tối đa ${lim} MB · ${dur} giây`);
+    text($('#recovery-limit'),`Giới hạn tải lên: ${lim} MB, ${dur} giây. Lời thoại Gemini/ElevenLabs chỉ chạy sau khi có video thật.`);
     await loadVoices();
     text($('#ai-state'),data.ai_video_local?'Model local đã được cài. Tác vụ tạo video có thể tốn nhiều VRAM và thời gian.':'Chưa có GPU + model video tương thích. Tính năng khóa để không tạo kết quả giả.');
   }catch(e){showError(e);}
@@ -465,6 +490,11 @@ function init(){
   $('#add-url').addEventListener('click',addLink);
   $('#video-url').addEventListener('keydown',e=>{if(e.key==='Enter')addLink();});
   $('#video-upload').addEventListener('change',e=>upload(e.target.files?.[0]));
+  $('#recovery-license').addEventListener('change',e=>{
+    $('#recovery-file').disabled=!e.target.checked;
+    $('#recovery-file-label').setAttribute('aria-disabled',String(!e.target.checked));
+  });
+  $('#recovery-file').addEventListener('change',e=>uploadFailedProjectFile(e.target.files?.[0]));
   const drop=$('#dropzone');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');upload(e.dataTransfer.files?.[0]);});
   $('#refresh-projects').addEventListener('click',loadProjects);
   $('#project-select').addEventListener('change',e=>selectProject(e.target.value));
