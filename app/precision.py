@@ -12,7 +12,7 @@ def limited_video_dimensions(width, height, max_edge=1280):
 
     Zero disables the limit. Ensure even H.264 dimensions and preserve aspect.
     """
-    if not max_edge or max(width,height)<=max_edge:
+    if max_edge<=0 or max(width,height)<=max_edge:
         return width,height
     factor=max_edge/max(width,height)
     out_w=max(2,2*round(width*factor/2))
