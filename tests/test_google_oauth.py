@@ -30,7 +30,7 @@ def test_google_disabled_by_default_and_no_secret_leak(client, monkeypatch):
         assert 'secret' not in str(settings).lower()
         page = other.get('/login').text
         assert 'id="google-login"' in page
-        assert 'aria-disabled="true"' in page
+        assert 'id="google-setup-guide"' in page
         resp = other.get('/api/auth/google/start')
         assert resp.status_code == 303
         assert resp.headers['location'] == '/login?google_error=not_configured'

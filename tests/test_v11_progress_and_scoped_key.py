@@ -46,23 +46,18 @@ def test_gemini_progress_callbacks_are_real_phase_completions(tmp_path,monkeypat
     video=tmp_path/'video.mp4';video.write_bytes(b'X'*3500)
     phases=[]
     def responder(req):
-        url=req.url.path
-        if req.method=='POST' and url=='/upload/v1beta/files':
-            return httpx.Response(200,headers={'x-goog-upload-url':'https://generativelanguage.googleapis.com/upload/finish'})
-        if req.method=='POST' and url=='/upload/finish':
-            return httpx.Response(200,json={'file':{'name':'files/testvideo123456789','uri':'https://files.example/video'}})
-        if req.method=='GET' and url=='/v1beta/files/testvideo123456789':
-            return httpx.Response(200,json={'state':'ACTIVE','uri':'https://files.example/video'})
-        if req.method=='POST' and url=='/v1beta/models/gemini-2.5-flash:generateContent':
-            return httpx.Response(200,json={'candidates':[{'content':{'parts':[{'text':__import__('json').dumps(samples())}]}}]})
-        if req.method=='DELETE':return httpx.Response(200,json={})
-        raise AssertionError((req.method,url))
+        if req.method=='POST' and req.url.path=='/v1beta/models/gemini-3.5-flash-lite:generateContent':
+            import json,base64
+            payload=json.loads(req.content)
+            assert base64.b64decode(payload['contents'][0]['parts'][0]['inlineData']['data'])==b'X'*3500
+            return httpx.Response(200,json={'candidates':[{'content':{'parts':[{'text':json.dumps(samples())}]}}]})
+        raise AssertionError((req.method,req.url.path))
     real=httpx.Client
     monkeypatch.setattr(gemini.httpx,'Client',lambda **k:real(transport=httpx.MockTransport(responder),**k))
-    monkeypatch.setattr(gemini,'_key_model',lambda:('local-test-fake-key','gemini-2.5-flash'))
+    monkeypatch.setattr(gemini,'_key_model',lambda:('local-test-fake-key','gemini-3.5-flash-lite'))
     result=gemini.analyze_video(video,2.3,progress=lambda n,msg:phases.append((n,msg)))
     assert len(result['segments'])==2
-    assert [n for n,_ in phases]==[11,20,46,67,74,91,97]
+    assert [n for n,_ in phases]==[11,31,55,74,91,97]
     assert all(phases[i][0]<phases[i+1][0] for i in range(len(phases)-1))
     assert 'phụ đề' in phases[-1][1]
 

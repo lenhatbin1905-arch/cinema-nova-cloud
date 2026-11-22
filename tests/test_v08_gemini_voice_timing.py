@@ -57,14 +57,14 @@ def test_normalizer_does_not_create_speech_from_empty_output():
 def test_gemini_api_link_encrypted_in_db_and_can_disconnect(client,monkeypatch):
     class MockResp:
         status_code=200
-        def json(self):return {'name':'models/gemini-2.5-flash'}
+        def json(self):return {'name':'models/gemini-3.5-flash-lite'}
     class MockClient:
         def __init__(self,*args,**kwargs):pass
         def __enter__(self):return self
         def __exit__(self,*args):pass
         def get(self,url,headers=None):
             assert headers['x-goog-api-key']=='test-key-gemini-123'
-            assert url=='/v1beta/models/gemini-2.5-flash'
+            assert url=='/v1beta/models/gemini-3.5-flash-lite'
             return MockResp()
     monkeypatch.setattr(gemini.httpx,'Client',MockClient)
     response=client.post('/api/integrations/gemini/link',json={'api_key':'test-key-gemini-123'})
@@ -165,38 +165,31 @@ def test_gemini_free_tier_limits_and_validation(client,monkeypatch):
     assert gemini.MAX_ANALYSIS_BYTES <= 60*1024*1024
 
 
-def test_one_gemini_video_upload_one_generation_then_cleanup(tmp_path,monkeypatch):
-    video=tmp_path/'source.mp4';video.write_bytes(b'X'*3000)
+def test_one_gemini_inline_generation_without_files_reference(tmp_path, monkeypatch):
+    import base64
+    video=tmp_path/'source.mp4'
+    video.write_bytes(b'X'*3000)
     calls=[]
     def handler(req):
         calls.append((req.method,req.url.path))
         assert req.headers.get('x-goog-api-key')=='fake-gemini-free-key'
-        if req.method=='POST' and req.url.path=='/upload/v1beta/files':
-            return httpx.Response(200,headers={'x-goog-upload-url':'https://generativelanguage.googleapis.com/upload/finish'})
-        if req.method=='POST' and req.url.path=='/upload/finish':
-            return httpx.Response(200,json={'file':{'name':'files/mock12345678','uri':'https://generativelanguage.googleapis.com/v1beta/files/mock12345678'}})
-        if req.method=='GET' and req.url.path=='/v1beta/files/mock12345678':
-            return httpx.Response(200,json={'name':'files/mock12345678','state':'ACTIVE','uri':'https://generativelanguage.googleapis.com/v1beta/files/mock12345678'})
-        if req.method=='POST' and req.url.path=='/v1beta/models/gemini-2.5-flash:generateContent':
-            payload=json.loads(req.content)
-            prompt=payload['contents'][0]['parts'][1]['text']
-            assert '2.30 seconds' in prompt
-            assert 'speaker' in prompt and 'voice_text' in prompt
-            assert payload['generationConfig']['temperature']==0.15
-            return httpx.Response(200,json={'candidates':[{'content':{'parts':[{'text':json.dumps(samples(),ensure_ascii=False)}]}}]})
-        if req.method=='DELETE' and req.url.path=='/v1beta/files/mock12345678':
-            return httpx.Response(200,json={})
-        return httpx.Response(404,json={'error':'unexpected route'})
+        assert req.method=='POST'
+        assert req.url.path=='/v1beta/models/gemini-3.5-flash-lite:generateContent'
+        payload=json.loads(req.content)
+        pieces=payload['contents'][0]['parts']
+        assert pieces[0]['inlineData']['mimeType']=='video/mp4'
+        assert base64.b64decode(pieces[0]['inlineData']['data'])==b'X'*3000
+        assert '2.30 seconds' in pieces[1]['text']
+        assert 'speaker' in pieces[1]['text'] and 'voice_text' in pieces[1]['text']
+        assert payload['generationConfig']['temperature']==0.15
+        return httpx.Response(200,json={'candidates':[{'content':{'parts':[{'text':json.dumps(samples(),ensure_ascii=False)}]}}]})
     transport=httpx.MockTransport(handler)
-    real_client=httpx.Client
-    def client_factory(*a,**kw):
-        return real_client(transport=transport,**kw)
-    monkeypatch.setattr(gemini.httpx,'Client',client_factory)
-    monkeypatch.setattr(gemini,'_key_model',lambda:('fake-gemini-free-key','gemini-2.5-flash'))
+    real=httpx.Client
+    monkeypatch.setattr(gemini.httpx,'Client',lambda **kwargs:real(transport=transport,**kwargs))
+    monkeypatch.setattr(gemini,'_key_model',lambda:('fake-gemini-free-key','gemini-3.5-flash-lite'))
     result=gemini.analyze_video(video,2.3)
     assert len(result['segments'])==2
-    assert calls.count(('POST','/v1beta/models/gemini-2.5-flash:generateContent'))==1
-    assert calls[-1]==('DELETE','/v1beta/files/mock12345678')
+    assert calls==[('POST','/v1beta/models/gemini-3.5-flash-lite:generateContent')]
 
 
 def test_voice_timing_report_endpoint_from_real_synthesis(client, monkeypatch):

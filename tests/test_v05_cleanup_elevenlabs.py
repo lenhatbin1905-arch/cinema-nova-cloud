@@ -46,7 +46,9 @@ def test_elevenlabs_link_encrypt_quota_and_disconnect(client,monkeypatch):
         if path=='/v1/user/subscription': return Resp({'tier':'free','character_limit':10000,'character_count':9500})
         raise AssertionError(path)
     monkeypatch.setattr(eleven,'_request',fake_request)
-    assert client.get('/api/integrations/elevenlabs').json()=={'connected':False,'label':None}
+    state=client.get('/api/integrations/elevenlabs').json()
+    assert state['connected'] is False and state['label'] is None
+    assert 'storage' in state and 'api_key' not in state
     assert client.get('/api/integrations/elevenlabs/voices').status_code==422
     link=client.post('/api/integrations/elevenlabs/link',json={'api_key':'test-provider-api-key-123456789'})
     assert link.status_code==200,link.text

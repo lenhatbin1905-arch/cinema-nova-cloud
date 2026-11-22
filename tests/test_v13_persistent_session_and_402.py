@@ -32,7 +32,7 @@ def test_auth_cookie_remembered_for_six_months():
     assert auth.SESSION_TTL == 180*24*3600
     src=(Path(__file__).resolve().parents[1]/'app/auth_persistent.py').read_text()
     assert 'core._token_hash(token)' in src
-    assert 'now-row[5]>=86400' in src
+    assert 'now-row[5])>=86400' in src
     assert 'refresh_cookie' in src
     assert 'vietframe_auth_sessions' in src
 
