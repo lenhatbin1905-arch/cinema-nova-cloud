@@ -45,3 +45,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* v0.6: guides indicate search bounds only; no solid half-screen masking. */
 #cleanup-overlay{position:absolute;display:block;inset:0;background:transparent;box-shadow:none;border:0;pointer-events:none;z-index:3}
 #cleanup-overlay .cleanup-region{position:absolute;border:1.5px dashed #ffe4a6;background:#ffe4a60a;box-shadow:0 0 0 1px #0b1e1455 inset}
+
+/* Consent error: point to the exact required confirmation instead of an ambiguous toast. */
+.consent.needs-confirmation{background:#fff4eb;border:1px solid #cb7251;border-radius:8px;padding:12px;outline:2px solid #cb725122;transition:background .15s}
+.consent.needs-confirmation input{accent-color:#a94d30}

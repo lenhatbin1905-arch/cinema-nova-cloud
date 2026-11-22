@@ -45,7 +45,17 @@ function switchView(view) {
   if (view === 'settings') { loadCapabilities(); loadElevenStatus(); loadGeminiStatus(); }
 }
 function showError(error) { toast(error?.message || 'Có lỗi chưa xác định.', true); }
-function consent() { if (!$('#license-ok').checked) throw new Error('Bạn cần xác nhận quyền sử dụng video.'); }
+function consent() {
+  const box = $('#license-ok');
+  if (!box.checked) {
+    const wrapper = box.closest('.consent');
+    if (wrapper) wrapper.classList.add('needs-confirmation');
+    box.scrollIntoView({behavior:'smooth', block:'center'});
+    box.focus({preventScroll:true});
+    throw new Error('Link đã nhận diện. Hãy tích ô xác nhận quyền sử dụng video bên dưới, rồi bấm tải lại.');
+  }
+  box.closest('.consent')?.classList.remove('needs-confirmation');
+}
 
 async function addLink() {
   try {
@@ -227,13 +237,28 @@ async function completeVideo(){
 }
 function detectLinkPlatform(){
   const raw=$('#video-url').value.trim(),label=$('#link-detect');
-  if(!raw){text(label,'Dán link để nhận diện nền tảng video.');return;}
-  try{
-    const host=new URL(raw).hostname.toLowerCase().replace(/^www\./,'');
+  if (!raw) { text(label,'Dán link để nhận diện nền tảng video.'); return; }
+  try {
+    const parsed=new URL(raw);
+    if(parsed.protocol!=='https:') throw new Error('HTTPS only');
+    const host=parsed.hostname.toLowerCase().replace(/^www\./,'');
     const families=[['youtube.com','YouTube'],['youtu.be','YouTube'],['facebook.com','Facebook'],['fb.watch','Facebook'],['tiktok.com','TikTok'],['vt.tiktok.com','TikTok'],['douyin.com','Douyin'],['v.douyin.com','Douyin'],['bilibili.com','Bilibili'],['b23.tv','Bilibili'],['instagram.com','Instagram']];
     const match=families.find(([suffix])=>host===suffix||host.endsWith('.'+suffix));
-    text(label,match?'Đã nhận diện: '+match[1]+' · Bấm Nhận diện & tải video để kiểm tra clip thật.':'Link chưa thuộc 6 nền tảng được hỗ trợ.');
-  }catch{text(label,'Link chưa hợp lệ. Hãy dán URL đầy đủ bắt đầu bằng https://');}
+    if (!match) { text(label,'Link chưa thuộc 6 nền tảng được hỗ trợ.'); return; }
+    let kind=match[1];
+    if(kind==='YouTube' && /^\/shorts\//i.test(parsed.pathname)) {
+      const videoId=parsed.pathname.split('/')[2]||'';
+      if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        text(label,'Đây là link YouTube Shorts nhưng mã video chưa hợp lệ (cần 11 ký tự).');
+        return;
+      }
+      kind='YouTube Shorts';
+    }
+    const confirmed=$('#license-ok').checked;
+    text(label,'Đã nhận diện: '+kind+(confirmed
+      ? ' · Sẵn sàng thử tải video thật. Bấm nút bên phải.'
+      : ' · Hãy tích ô xác nhận quyền sử dụng video ở dưới rồi bấm tải.'));
+  } catch { text(label,'Link chưa hợp lệ. Hãy dán URL HTTPS đầy đủ.'); }
 }
 
 async function loadGeminiStatus(){
@@ -433,6 +458,10 @@ function init(){
   $('#change-password-form').addEventListener('submit',changePassword);
   $$('.nav-item').forEach(x=>x.addEventListener('click',()=>switchView(x.dataset.view)));
   $('#top-new').addEventListener('click',()=>{switchView('projects');$('#video-url').focus();});
+  $('#license-ok').addEventListener('change', () => {
+    if ($('#license-ok').checked) $('#license-ok').closest('.consent')?.classList.remove('needs-confirmation');
+    detectLinkPlatform();
+  });
   $('#add-url').addEventListener('click',addLink);
   $('#video-url').addEventListener('keydown',e=>{if(e.key==='Enter')addLink();});
   $('#video-upload').addEventListener('change',e=>upload(e.target.files?.[0]));
