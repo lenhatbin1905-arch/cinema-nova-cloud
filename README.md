@@ -1,4 +1,4 @@
-# VietFrame Studio (v0.8) — Free-first local video workspace
+# VietFrame Studio (v0.9) — Free-first local video workspace
 
 Một ứng dụng biên tập video **thật** (không giả lập kết quả), thiết kế giao diện gọn, giống phần mềm biên tập hơn là các trang AI tạo hàng loạt.
 
@@ -146,3 +146,9 @@ Trong luồng tạo giọng, VietFrame đo WAV/MP3 thật bằng FFprobe, đặt
 Gemini phân tích video có âm thanh nguồn, tối đa **180 giây/60 MB** mỗi lượt. Các timecode Gemini vẫn là suy đoán cần người dùng xem lại, nhất là cảnh nhiều người nói/nhạc lớn. Khi chưa có lời nói nghe rõ, hệ thống không bịa phụ đề. File upload gửi Google được yêu cầu xóa ở khối `finally`. Chỉ dùng API key Free-tier của dự án *không bật billing*, vì API key tự nó không chứng minh rằng billing đã tắt; người dùng chịu trách nhiệm kiểm tra gói trong Google AI Studio. ElevenLabs vẫn được giới hạn bởi quota API Free, không được hứa miễn phí vô hạn.
 
 Trạng thái hiện tại: **mã nguồn + kiểm thử cục bộ**, chưa xác minh request API Gemini hoặc chất lượng giọng ElevenLabs thật vì chưa có khóa của chủ sở hữu; bản xem trước *tĩnh* trên `vietframe-studio-eghb.onrender.com` không chạy backend này. Trước khi dùng trực tuyến cần dịch vụ backend có bảo mật và lưu trữ dữ liệu bền vững.
+
+## Đăng nhập bằng Google (v0.9)
+
+VietFrame hỗ trợ nút **Tiếp tục bằng Google** bằng OAuth 2.0 / OpenID Connect. **Nút chỉ bật sau khi đã cấu hình OAuth Client ID và Client Secret** ở Render Environment, không phụ thuộc Gemini API key. Người đăng nhập phải thuộc email chủ sở hữu được phép; tài khoản Google được khóa bằng `sub` bất biến và kiểm chứng ID token trên máy chủ. Đăng nhập mật khẩu hiện tại vẫn hoạt động.
+
+Xem **[hướng dẫn đăng nhập Google](docs/GOOGLE_LOGIN_SETUP.md)** để cấu hình Web OAuth, đúng redirect URI và lưu ý SQLite trên Render Free có thể mất khi restart/redeploy.
