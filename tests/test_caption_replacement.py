@@ -121,3 +121,13 @@ def test_caption_selection_purpose_roundtrip_with_api(client):
     assert saved['x']==15 and saved['y']==70
     assert saved['start']==0 and saved['end']==2.2
     assert saved['method']=='glyph'
+
+
+
+def test_processing_large_videos_respects_free_server_memory():
+    from app.precision import limited_video_dimensions
+    assert limited_video_dimensions(1080,1920,1280)==(720,1280)
+    assert limited_video_dimensions(1920,1080,1280)==(1280,720)
+    assert limited_video_dimensions(1080,1920,0)==(1080,1920)
+    assert limited_video_dimensions(320,570,1280)==(320,570)
+    assert all(v%2==0 for v in limited_video_dimensions(1080,1920,1280))
